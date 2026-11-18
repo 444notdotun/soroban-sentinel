@@ -31,7 +31,7 @@ cargo run -p sentinel-cli -- scan --help
 
 ## 2. Selecting and Claiming Tasks
 
-1. **Browse Issues**: Check the open issues on GitHub or inspect the curated backlog in [docs/OPEN_SOURCE_CONTRIBUTION_PLAN.md](docs/OPEN_SOURCE_CONTRIBUTION_PLAN.md).
+1. **Browse Issues**: Check the [open GitHub issues](https://github.com/ekwe7/soroban-sentinel/issues). GitHub is the single source of truth for available work; see [docs/OPEN_SOURCE_CONTRIBUTION_PLAN.md](docs/OPEN_SOURCE_CONTRIBUTION_PLAN.md#3-finding-work) for useful label filters.
 2. **Task Levels**:
    * **Trivial**: CLI flags, formatting adapters, pure domain math unit tests. Ideal for first-time contributors.
    * **Medium**: XDR parsing, RPC chunking/retry adapters, webhook dispatchers.
@@ -50,7 +50,7 @@ cargo run -p sentinel-cli -- scan --help
 2. Create a dedicated feature or bugfix branch off `main`:
    ```bash
    # Documented convention: feature/issue-<number>-<short-description>
-   git checkout -b feature/issue-2-json-output
+   git checkout -b feature/issue-<number>-<short-description>
    ```
 3. Keep changes focused. Avoid unrelated refactorings or style adjustments outside the scope of the assigned task.
 
@@ -86,7 +86,7 @@ Before submitting a Pull Request, all changes must pass the workspace verificati
 ## 5. Pull Request Expectations
 
 * **Target Branch**: Submit PRs against the `main` branch.
-* **Link Issue**: Reference the corresponding issue in your PR title or description (e.g., `Closes #2` or `Fixes #14`).
+* **Link Issue**: Reference the corresponding issue in your PR title or description (e.g., `Closes #<number>`).
 * **Description & Verification**:
   * Clearly describe what changed and why.
   * List the tests added or modified.
@@ -109,6 +109,6 @@ Before submitting a Pull Request, all changes must pass the workspace verificati
 
 ## 7. Additional References
 
-* [docs/OPEN_SOURCE_CONTRIBUTION_PLAN.md](docs/OPEN_SOURCE_CONTRIBUTION_PLAN.md) — Detailed backlog and task complexity breakdown.
+* [docs/OPEN_SOURCE_CONTRIBUTION_PLAN.md](docs/OPEN_SOURCE_CONTRIBUTION_PLAN.md) — Contribution workflow, complexity levels, and how to find open issues.
 * [docs/ARCHITECTURE_DECISION.md](docs/ARCHITECTURE_DECISION.md) — Architectural pattern (Hexagonal / Ports & Adapters).
 * [docs/SECURITY.md](docs/SECURITY.md) — Security policy and threat model.
