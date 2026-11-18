@@ -149,7 +149,7 @@ async fn test_cli_scan_json_format_outputs_valid_schema() {
     let mock_server = MockServer::start().await;
     let contract_id = [3u8; 32];
     let contract_strkey = stellar_strkey::Contract(contract_id).to_string();
-    let instance_key = derive_contract_instance_key(&contract_id).unwrap();
+    let _instance_key = derive_contract_instance_key(&contract_id).unwrap();
     let instance_xdr = make_instance_xdr(contract_id);
 
     Mock::given(method("POST"))
@@ -165,19 +165,26 @@ async fn test_cli_scan_json_format_outputs_valid_schema() {
                         "protocolVersion": 22
                     }
                 })),
-                "getLedgerEntries" => ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "result": {
-                        "latestLedger": 5_400_000,
-                        "entries": [{
-                            "key": instance_key,
+                "getLedgerEntries" => {
+                    let keys = body["params"]["keys"].as_array().unwrap();
+                    let mut entries = vec![];
+                    for k in keys {
+                        entries.push(serde_json::json!({
+                            "key": k,
                             "xdr": instance_xdr,
                             "liveUntilLedgerSeq": 5_600_000,
                             "lastModifiedLedgerSeq": 5_390_000
-                        }]
+                        }));
                     }
-                })),
+                    ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "result": {
+                            "latestLedger": 5_400_000,
+                            "entries": entries
+                        }
+                    }))
+                }
                 other => panic!("Unexpected method: {}", other),
             }
         })
@@ -387,4 +394,221 @@ async fn test_cli_scan_critical_entries_returns_exit_code_2() {
         .stdout(predicate::str::contains(
             "Summary: 1 entries checked. 0 OK, 0 WARN, 1 CRITICAL/ARCHIVED.",
         ));
+}
+
+// Test L: Scan with typed key expression --key-expr
+#[tokio::test]
+async fn test_cli_scan_with_key_expr_success() {
+    let mock_server = MockServer::start().await;
+    let contract_id = [9u8; 32];
+    let contract_strkey = stellar_strkey::Contract(contract_id).to_string();
+    let _instance_key = derive_contract_instance_key(&contract_id).unwrap();
+    let instance_xdr = make_instance_xdr(contract_id);
+
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .respond_with(move |req: &wiremock::Request| {
+            let body: serde_json::Value = serde_json::from_slice(&req.body).unwrap();
+            match body["method"].as_str().unwrap() {
+                "getLatestLedger" => ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": { "sequence": 5_400_000, "protocolVersion": 22 }
+                })),
+                "getLedgerEntries" => {
+                    let keys = body["params"]["keys"].as_array().unwrap();
+                    let mut entries = vec![];
+                    for k in keys {
+                        entries.push(serde_json::json!({
+                            "key": k,
+                            "xdr": instance_xdr,
+                            "liveUntilLedgerSeq": 5_600_000,
+                            "lastModifiedLedgerSeq": 5_390_000
+                        }));
+                    }
+                    ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "result": {
+                            "latestLedger": 5_400_000,
+                            "entries": entries
+                        }
+                    }))
+                }
+                other => panic!("Unexpected method: {}", other),
+            }
+        })
+        .mount(&mock_server)
+        .await;
+
+    let mut cmd = Command::cargo_bin("sentinel").unwrap();
+    cmd.args([
+        "scan",
+        &contract_strkey,
+        "--rpc-url",
+        &mock_server.uri(),
+        "--key-expr",
+        "sym:Balance",
+        "--format",
+        "json",
+    ]);
+
+    cmd.assert()
+        .code(0)
+        .stdout(predicate::str::contains("persistent:sym:Balance"));
+}
+
+// Test M: Scan with malformed --key-expr returns exit code 10
+#[test]
+fn test_cli_scan_malformed_key_expr_returns_exit_code_10() {
+    let mut cmd = Command::cargo_bin("sentinel").unwrap();
+    cmd.args([
+        "scan",
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+        "--key-expr",
+        "badprefix:123",
+    ]);
+
+    cmd.assert()
+        .code(10)
+        .stderr(predicate::str::contains("Unknown key expression prefix"));
+}
+
+// Test N: Invalid --rpc-timeout or --rpc-max-retries bounds return exit code 10
+#[test]
+fn test_cli_scan_invalid_rpc_bounds_returns_exit_code_10() {
+    // Timeout 0
+    let mut cmd = Command::cargo_bin("sentinel").unwrap();
+    cmd.args([
+        "scan",
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+        "--rpc-timeout",
+        "0",
+    ]);
+    cmd.assert().code(10).stderr(predicate::str::contains(
+        "--rpc-timeout must be between 1 and 120",
+    ));
+
+    // Retries 11
+    let mut cmd2 = Command::cargo_bin("sentinel").unwrap();
+    cmd2.args([
+        "scan",
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+        "--rpc-max-retries",
+        "15",
+    ]);
+    cmd2.assert().code(10).stderr(predicate::str::contains(
+        "--rpc-max-retries must be between 0 and 10",
+    ));
+}
+
+// Test O: Scan with --baseline comparison against wiremock
+#[tokio::test]
+async fn test_cli_scan_baseline_comparison() {
+    let mock_server = MockServer::start().await;
+    let contract_id = [10u8; 32];
+    let contract_strkey = stellar_strkey::Contract(contract_id).to_string();
+    let instance_key = derive_contract_instance_key(&contract_id).unwrap();
+    let instance_xdr = make_instance_xdr(contract_id);
+
+    // Current live_until = 5,450,000 (WARN status with 50,000 ledgers remaining)
+    let current_live = 5_450_000;
+
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .respond_with(move |req: &wiremock::Request| {
+            let body: serde_json::Value = serde_json::from_slice(&req.body).unwrap();
+            match body["method"].as_str().unwrap() {
+                "getLatestLedger" => ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": { "sequence": 5_400_000, "protocolVersion": 22 }
+                })),
+                "getLedgerEntries" => ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": {
+                        "latestLedger": 5_400_000,
+                        "entries": [{
+                            "key": instance_key,
+                            "xdr": instance_xdr,
+                            "liveUntilLedgerSeq": current_live,
+                            "lastModifiedLedgerSeq": 5_390_000
+                        }]
+                    }
+                })),
+                other => panic!("Unexpected method: {}", other),
+            }
+        })
+        .mount(&mock_server)
+        .await;
+
+    // Create a temporary baseline file where instance was OK
+    let temp_baseline = std::env::temp_dir().join(format!("baseline_{}.json", contract_strkey));
+    let baseline_content = serde_json::json!({
+        "contract_id": contract_strkey,
+        "network": "testnet",
+        "latest_ledger": 5_300_000,
+        "entries": [{
+            "identifier": "instance",
+            "live_until_ledger": 5_450_000,
+            "remaining_ledgers": 150_000,
+            "status": "ok"
+        }]
+    });
+    std::fs::write(&temp_baseline, baseline_content.to_string()).unwrap();
+
+    // 1. Text format shows change table and summary
+    let mut cmd = Command::cargo_bin("sentinel").unwrap();
+    cmd.args([
+        "scan",
+        &contract_strkey,
+        "--rpc-url",
+        &mock_server.uri(),
+        "--baseline",
+        temp_baseline.to_str().unwrap(),
+        "--format",
+        "text",
+    ]);
+
+    cmd.assert()
+        .code(1) // overall status is WARN -> exit 1
+        .stdout(predicate::str::contains("Baseline Comparison"))
+        .stdout(predicate::str::contains("status_worsened"))
+        .stdout(predicate::str::contains("Baseline Diff Summary"));
+
+    // 2. With --fail-on-regression, status_worsened triggers exit code 2
+    let mut cmd_fail = Command::cargo_bin("sentinel").unwrap();
+    cmd_fail.args([
+        "scan",
+        &contract_strkey,
+        "--rpc-url",
+        &mock_server.uri(),
+        "--baseline",
+        temp_baseline.to_str().unwrap(),
+        "--fail-on-regression",
+    ]);
+
+    cmd_fail.assert().code(2);
+
+    // 3. JSON format outputs "changes" object
+    let mut cmd_json = Command::cargo_bin("sentinel").unwrap();
+    cmd_json.args([
+        "scan",
+        &contract_strkey,
+        "--rpc-url",
+        &mock_server.uri(),
+        "--baseline",
+        temp_baseline.to_str().unwrap(),
+        "--format",
+        "json",
+    ]);
+
+    cmd_json
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains("\"changes\""))
+        .stdout(predicate::str::contains("\"has_regression\": true"));
+
+    let _ = std::fs::remove_file(temp_baseline);
 }

@@ -2,6 +2,7 @@
 
 use comfy_table::presets::ASCII_FULL;
 use comfy_table::{Cell, Color, Table};
+use sentinel_core::domain::compare::{BaselineDiff, ChangeCategory};
 use sentinel_core::domain::RiskLevel;
 use sentinel_core::usecases::{StorageEntryReport, TTLReport};
 
@@ -131,6 +132,106 @@ pub fn render_text(report: &TTLReport) -> String {
     );
 
     format!("{}\n{}\n{}", header_line, table, summary_line)
+}
+
+/// Formats a change category into a styled table cell.
+fn format_category_cell(cat: ChangeCategory) -> Cell {
+    match cat {
+        ChangeCategory::Extended | ChangeCategory::StatusImproved => {
+            Cell::new(cat.to_string()).fg(Color::Green)
+        }
+        ChangeCategory::Unchanged => Cell::new(cat.to_string()),
+        ChangeCategory::Decayed => Cell::new(cat.to_string()).fg(Color::DarkGrey),
+        ChangeCategory::StatusWorsened | ChangeCategory::Removed => {
+            Cell::new(cat.to_string()).fg(Color::Red)
+        }
+        ChangeCategory::Added => Cell::new(cat.to_string()).fg(Color::Cyan),
+    }
+}
+
+/// Renders a `TTLReport` alongside a `BaselineDiff` comparison.
+pub fn render_text_with_diff(report: &TTLReport, diff: Option<&BaselineDiff>) -> String {
+    let base_text = render_text(report);
+    let Some(d) = diff else {
+        return base_text;
+    };
+
+    let mut diff_table = Table::new();
+    diff_table.load_preset(ASCII_FULL);
+    diff_table.set_header(vec![
+        "Entry Description",
+        "Change Category",
+        "Baseline Live-Until",
+        "Current Live-Until",
+        "Delta (Ledgers)",
+        "Status Change",
+    ]);
+
+    for entry in &d.entries {
+        let desc = format_entry_description(&entry.identifier);
+        let cat_cell = format_category_cell(entry.category);
+        let b_live = if entry.baseline_live_until == 0 {
+            "-".to_string()
+        } else {
+            format_with_commas(entry.baseline_live_until)
+        };
+        let c_live = if entry.current_live_until == 0 {
+            "-".to_string()
+        } else {
+            format_with_commas(entry.current_live_until)
+        };
+        let delta_str = if entry.live_until_delta > 0 {
+            format!("+{}", format_with_commas(entry.live_until_delta))
+        } else if entry.live_until_delta < 0 {
+            format_with_commas(entry.live_until_delta)
+        } else {
+            "0".to_string()
+        };
+
+        let status_change = match (entry.baseline_status, entry.current_status) {
+            (Some(b), Some(c)) => {
+                if b == c {
+                    b.to_string()
+                } else {
+                    format!("{} -> {}", b, c)
+                }
+            }
+            (None, Some(c)) => format!("(new) -> {}", c),
+            (Some(b), None) => format!("{} -> (removed)", b),
+            (None, None) => "-".to_string(),
+        };
+
+        diff_table.add_row(vec![
+            Cell::new(desc),
+            cat_cell,
+            Cell::new(b_live),
+            Cell::new(c_live),
+            Cell::new(delta_str),
+            Cell::new(status_change),
+        ]);
+    }
+
+    let elapsed_sign = if d.ledgers_elapsed >= 0 { "+" } else { "" };
+    let summary_line = format!(
+        "Baseline Diff Summary: {} extended, {} unchanged, {} decayed, {} worsened, {} improved, {} added, {} removed. (Elapsed: {}{} ledgers)",
+        d.summary.extended,
+        d.summary.unchanged,
+        d.summary.decayed,
+        d.summary.status_worsened,
+        d.summary.status_improved,
+        d.summary.added,
+        d.summary.removed,
+        elapsed_sign,
+        format_with_commas(d.ledgers_elapsed),
+    );
+
+    format!(
+        "{}\n\nBaseline Comparison (Baseline Ledger: {})\n{}\n{}",
+        base_text,
+        format_with_commas(d.baseline_latest_ledger),
+        diff_table,
+        summary_line
+    )
 }
 
 #[cfg(test)]

@@ -4,19 +4,19 @@ use serde::{Deserialize, Serialize};
 use stellar_xdr::curr::{ReadXdr, WriteXdr};
 
 use crate::adapters::{
-    derive_contract_code_key, derive_contract_instance_key, derive_persistent_symbol_key,
-    derive_persistent_xdr_key, extract_wasm_hash_from_instance_entry, parse_contract_id,
-    safe_xdr_limits,
+    derive_contract_code_key, derive_contract_instance_key, derive_persistent_key_from_scval,
+    derive_persistent_symbol_key, derive_persistent_xdr_key, extract_wasm_hash_from_instance_entry,
+    parse_contract_id, parse_key_expr, safe_xdr_limits,
 };
 use crate::domain::{
-    calculate_remaining_ledgers, estimate_remaining_days, estimate_remaining_seconds,
+    calculate_remaining_ledgers, estimate_remaining_days, estimate_remaining_seconds_with_velocity,
     evaluate_risk, Durability, EntryType, RiskLevel, ThresholdConfig, TARGET_LEDGER_CLOSE_SECONDS,
 };
 use crate::error::SentinelResult;
 use crate::ports::reader::LedgerReader;
 
 /// Request parameters for scanning a Soroban contract.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ScanRequest {
     /// Contract address encoded as Stellar Strkey (e.g. `CA3D...`).
     pub contract_id_strkey: String,
@@ -24,10 +24,14 @@ pub struct ScanRequest {
     pub persistent_symbols: Vec<String>,
     /// List of persistent storage keys encoded as base64 `ScVal` XDR strings.
     pub persistent_xdr_keys: Vec<String>,
+    /// List of persistent storage keys encoded as typed expressions (e.g. `["vec[sym:Balance, addr:G...]"]`).
+    pub persistent_key_exprs: Vec<String>,
     /// Threshold configuration for warning and critical expiry evaluation.
     pub threshold_config: ThresholdConfig,
     /// Target network descriptor (e.g. "testnet", "mainnet", etc.).
     pub network: Option<String>,
+    /// Optional override for ledger close velocity in seconds per ledger.
+    pub ledger_seconds_override: Option<f64>,
 }
 
 impl ScanRequest {
@@ -37,8 +41,10 @@ impl ScanRequest {
             contract_id_strkey: contract_id_strkey.into(),
             persistent_symbols: Vec::new(),
             persistent_xdr_keys: Vec::new(),
+            persistent_key_exprs: Vec::new(),
             threshold_config: ThresholdConfig::default(),
             network: None,
+            ledger_seconds_override: None,
         }
     }
 
@@ -54,6 +60,12 @@ impl ScanRequest {
         self
     }
 
+    /// Add persistent typed key expressions to the request.
+    pub fn with_persistent_key_exprs(mut self, exprs: Vec<String>) -> Self {
+        self.persistent_key_exprs = exprs;
+        self
+    }
+
     /// Set a custom threshold configuration.
     pub fn with_threshold_config(mut self, threshold_config: ThresholdConfig) -> Self {
         self.threshold_config = threshold_config;
@@ -63,6 +75,12 @@ impl ScanRequest {
     /// Set the network name.
     pub fn with_network(mut self, network: impl Into<String>) -> Self {
         self.network = Some(network.into());
+        self
+    }
+
+    /// Set an optional ledger close velocity override.
+    pub fn with_ledger_seconds(mut self, ledger_seconds: Option<f64>) -> Self {
+        self.ledger_seconds_override = ledger_seconds;
         self
     }
 }
@@ -263,7 +281,21 @@ impl<R: LedgerReader> ScanContractUseCase<R> {
         // 1. Derive deterministic ContractInstance key
         let instance_key_xdr = derive_contract_instance_key(&contract_id_bytes)?;
 
-        // 2. Derive persistent keys from symbols and base64 ScVal
+        // Resolve ledger close velocity: explicit CLI override, or query getLedgers from RPC, or default 5.0s
+        let ledger_velocity = if let Some(ov) = request.ledger_seconds_override {
+            if (1.0..=60.0).contains(&ov) {
+                ov
+            } else {
+                TARGET_LEDGER_CLOSE_SECONDS
+            }
+        } else {
+            match self.reader.get_ledger_close_velocity(latest_ledger).await {
+                Ok(Some(v)) if (1.0..=60.0).contains(&v) => v,
+                _ => TARGET_LEDGER_CLOSE_SECONDS,
+            }
+        };
+
+        // 2. Derive persistent keys from symbols, base64 ScVal, and typed key expressions
         let mut persistent_descriptors: Vec<(String, String)> = Vec::new();
         for sym in &request.persistent_symbols {
             let key_xdr = derive_persistent_symbol_key(&contract_id_bytes, sym)?;
@@ -272,6 +304,11 @@ impl<R: LedgerReader> ScanContractUseCase<R> {
         for xdr_key in &request.persistent_xdr_keys {
             let key_xdr = derive_persistent_xdr_key(&contract_id_bytes, xdr_key)?;
             persistent_descriptors.push((format!("persistent_xdr:{}", xdr_key), key_xdr));
+        }
+        for expr in &request.persistent_key_exprs {
+            let scval = parse_key_expr(expr)?;
+            let key_xdr = derive_persistent_key_from_scval(&contract_id_bytes, scval)?;
+            persistent_descriptors.push((format!("persistent:{}", expr), key_xdr));
         }
 
         // 3. Query initial batch: instance key + persistent keys
@@ -296,7 +333,8 @@ impl<R: LedgerReader> ScanContractUseCase<R> {
             let byte_size = compute_byte_size(&entry.entry_xdr_base64);
             let live_until = entry.live_until_ledger_seq;
             let remaining_ledgers = calculate_remaining_ledgers(live_until, latest_ledger);
-            let remaining_seconds = estimate_remaining_seconds(remaining_ledgers);
+            let remaining_seconds =
+                estimate_remaining_seconds_with_velocity(remaining_ledgers, ledger_velocity);
             let remaining_days = estimate_remaining_days(remaining_seconds);
             let status = evaluate_risk(remaining_ledgers, &request.threshold_config);
 
@@ -346,7 +384,8 @@ impl<R: LedgerReader> ScanContractUseCase<R> {
                 let byte_size = compute_byte_size(&code_entry.entry_xdr_base64);
                 let live_until = code_entry.live_until_ledger_seq;
                 let remaining_ledgers = calculate_remaining_ledgers(live_until, latest_ledger);
-                let remaining_seconds = estimate_remaining_seconds(remaining_ledgers);
+                let remaining_seconds =
+                    estimate_remaining_seconds_with_velocity(remaining_ledgers, ledger_velocity);
                 let remaining_days = estimate_remaining_days(remaining_seconds);
                 let status = evaluate_risk(remaining_ledgers, &request.threshold_config);
 
@@ -385,7 +424,8 @@ impl<R: LedgerReader> ScanContractUseCase<R> {
                 let byte_size = compute_byte_size(&entry.entry_xdr_base64);
                 let live_until = entry.live_until_ledger_seq;
                 let remaining_ledgers = calculate_remaining_ledgers(live_until, latest_ledger);
-                let remaining_seconds = estimate_remaining_seconds(remaining_ledgers);
+                let remaining_seconds =
+                    estimate_remaining_seconds_with_velocity(remaining_ledgers, ledger_velocity);
                 let remaining_days = estimate_remaining_days(remaining_seconds);
                 let status = evaluate_risk(remaining_ledgers, &request.threshold_config);
 
@@ -422,7 +462,7 @@ impl<R: LedgerReader> ScanContractUseCase<R> {
             contract_id: request.contract_id_strkey,
             network,
             latest_ledger,
-            ledger_velocity_seconds: TARGET_LEDGER_CLOSE_SECONDS,
+            ledger_velocity_seconds: ledger_velocity,
             entries: reports,
             overall_status,
         })
@@ -747,5 +787,80 @@ mod tests {
             ]),
             RiskLevel::Archived
         );
+    }
+
+    #[tokio::test]
+    async fn test_scan_with_persistent_key_expr() {
+        let contract_bytes = [40u8; 32];
+        let contract_strkey = stellar_strkey::Contract(contract_bytes).to_string();
+
+        let instance_key = derive_contract_instance_key(&contract_bytes).unwrap();
+        let instance_xdr = make_test_instance_xdr(contract_bytes, [41u8; 32]);
+        let instance_raw = RawLedgerEntry::new(&instance_key, &instance_xdr, 5_600_000, 5_400_000);
+
+        // Persistent key expr: vec[sym:Balance, u32:42]
+        let key_expr = "vec[sym:Balance, u32:42]";
+        let scval = parse_key_expr(key_expr).unwrap();
+        let persistent_key =
+            derive_persistent_key_from_scval(&contract_bytes, scval.clone()).unwrap();
+
+        let persistent_entry_data = LedgerEntryData::ContractData(ContractDataEntry {
+            ext: ExtensionPoint::V0,
+            contract: ScAddress::Contract(Hash(contract_bytes)),
+            key: scval,
+            durability: ContractDataDurability::Persistent,
+            val: ScVal::U32(100),
+        });
+        let persistent_entry_xdr = persistent_entry_data.to_xdr_base64(Limits::none()).unwrap();
+        let persistent_raw =
+            RawLedgerEntry::new(&persistent_key, &persistent_entry_xdr, 5_700_000, 5_400_000);
+
+        let mock_reader = MockLedgerReader::new()
+            .with_latest_ledger(5_400_000, 22)
+            .with_entry(instance_raw)
+            .with_entry(persistent_raw);
+
+        let usecase = ScanContractUseCase::new(mock_reader);
+        let request = ScanRequest::new(&contract_strkey)
+            .with_persistent_key_exprs(vec![key_expr.to_string()]);
+
+        let report = usecase.execute(request).await.unwrap();
+
+        let expr_entry = report
+            .entries
+            .iter()
+            .find(|e| e.key_identifier == "persistent:vec[sym:Balance, u32:42]")
+            .expect("should find report with persistent:vec[sym:Balance, u32:42] identifier");
+        assert_eq!(expr_entry.live_until_ledger, 5_700_000);
+        assert_eq!(expr_entry.remaining_ledgers, 300_000);
+        assert_eq!(expr_entry.status, RiskLevel::Ok);
+    }
+
+    #[tokio::test]
+    async fn test_scan_with_measured_ledger_velocity() {
+        let contract_bytes = [50u8; 32];
+        let contract_strkey = stellar_strkey::Contract(contract_bytes).to_string();
+
+        let instance_key = derive_contract_instance_key(&contract_bytes).unwrap();
+        let instance_xdr = make_test_instance_xdr(contract_bytes, [51u8; 32]);
+        let instance_raw = RawLedgerEntry::new(&instance_key, &instance_xdr, 5_500_000, 5_400_000);
+
+        // Measured velocity = 6.0s/ledger
+        let mock_reader = MockLedgerReader::new()
+            .with_latest_ledger(5_400_000, 22)
+            .with_velocity(6.0)
+            .with_entry(instance_raw);
+
+        let usecase = ScanContractUseCase::new(mock_reader);
+        let request = ScanRequest::new(&contract_strkey);
+
+        let report = usecase.execute(request).await.unwrap();
+        assert_eq!(report.ledger_velocity_seconds, 6.0);
+
+        let inst = &report.entries[0];
+        // 100,000 ledgers * 6.0s = 600,000s
+        assert_eq!(inst.estimated_remaining_seconds, 600_000.0);
+        // 600,000 / 86400 ~= 6.9444 days
+        assert!((inst.remaining_days - 6.9444).abs() < 1e-3);
     }
 }

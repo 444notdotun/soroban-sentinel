@@ -16,13 +16,33 @@ pub const DEFAULT_MAX_RETRIES: u32 = 3;
 /// Default initial retry delay in milliseconds.
 pub const DEFAULT_BASE_RETRY_DELAY_MS: u64 = 100;
 
-/// Retry configuration for handling transient HTTP and network errors.
+/// Default maximum backoff delay ceiling in seconds.
+pub const DEFAULT_MAX_DELAY_SECS: u64 = 30;
+
+/// Jitter mode applied to exponential backoff delays.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Jitter {
+    /// No jitter; exact computed backoff or clamped Retry-After delay.
+    None,
+    /// Full jitter: uniform random delay between 0 and backoff.
+    Full,
+    /// Equal jitter: half constant backoff + half uniform random.
+    Equal,
+}
+
+/// Retry configuration for handling transient HTTP and network errors.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RetryPolicy {
     /// Maximum number of attempts before propagating the error.
     pub max_retries: u32,
     /// Base delay applied to exponential backoff calculation.
     pub base_delay: Duration,
+    /// Upper bound cap for computed backoff or server-provided Retry-After.
+    pub max_delay: Duration,
+    /// Jitter strategy applied to delays.
+    pub jitter: Jitter,
+    /// Optional seed for deterministic PRNG in tests.
+    pub seed: Option<u64>,
 }
 
 impl Default for RetryPolicy {
@@ -30,7 +50,73 @@ impl Default for RetryPolicy {
         Self {
             max_retries: DEFAULT_MAX_RETRIES,
             base_delay: Duration::from_millis(DEFAULT_BASE_RETRY_DELAY_MS),
+            max_delay: Duration::from_secs(DEFAULT_MAX_DELAY_SECS),
+            jitter: Jitter::Full,
+            seed: None,
         }
+    }
+}
+
+impl RetryPolicy {
+    /// Set a custom max delay cap.
+    pub fn with_max_delay(mut self, max_delay: Duration) -> Self {
+        self.max_delay = max_delay;
+        self
+    }
+
+    /// Set a custom jitter strategy.
+    pub fn with_jitter(mut self, jitter: Jitter) -> Self {
+        self.jitter = jitter;
+        self
+    }
+
+    /// Set a seed for deterministic jitter in tests.
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = Some(seed);
+        self
+    }
+
+    /// Computes the delay before the next retry attempt given current attempt count and optional Retry-After header.
+    pub fn next_delay(&self, attempt: u32, retry_after: Option<Duration>) -> Duration {
+        if let Some(ra) = retry_after {
+            // Honour Retry-After delta-seconds clamped to max_delay
+            return std::cmp::min(ra, self.max_delay);
+        }
+
+        // Exponential backoff: base_delay * 2^(attempt - 1)
+        let exp_factor = 2u32.saturating_pow(attempt.saturating_sub(1));
+        let computed = self.base_delay.saturating_mul(exp_factor);
+        let capped = std::cmp::min(computed, self.max_delay);
+
+        match self.jitter {
+            Jitter::None => capped,
+            Jitter::Full => {
+                let factor = self.pseudo_random_factor(attempt);
+                capped.mul_f64(factor)
+            }
+            Jitter::Equal => {
+                let half = capped / 2;
+                let factor = self.pseudo_random_factor(attempt);
+                half + half.mul_f64(factor)
+            }
+        }
+    }
+
+    fn pseudo_random_factor(&self, attempt: u32) -> f64 {
+        let seed = self.seed.unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u64)
+                .unwrap_or(0x8543_291a_bcde_f012)
+        });
+        // SplitMix64 step
+        let mut x = seed
+            .wrapping_add(attempt as u64)
+            .wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        x ^= x >> 31;
+        (x as f64) / (u64::MAX as f64)
     }
 }
 
@@ -50,6 +136,17 @@ pub fn validate_rpc_url(url: &str) -> SentinelResult<()> {
     Ok(())
 }
 
+/// Parses standard HTTP Retry-After delta-seconds. Invalid values or HTTP-date formats return None.
+fn parse_retry_after(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
+    let header_val = headers.get(reqwest::header::RETRY_AFTER)?;
+    let val_str = header_val.to_str().ok()?.trim();
+    if let Ok(secs) = val_str.parse::<u64>() {
+        Some(Duration::from_secs(secs))
+    } else {
+        None
+    }
+}
+
 /// JSON-RPC 2.0 client for interacting with Soroban RPC nodes.
 #[derive(Debug, Clone)]
 pub struct SorobanRpcClient {
@@ -61,8 +158,13 @@ pub struct SorobanRpcClient {
 impl SorobanRpcClient {
     /// Create a new `SorobanRpcClient` with default timeout (10 seconds), 3-hop redirect limit, and standard retry policy.
     pub fn new(rpc_url: impl Into<String>) -> Self {
+        Self::new_with_timeout(rpc_url, Duration::from_secs(10))
+    }
+
+    /// Create a new `SorobanRpcClient` with a configurable request timeout.
+    pub fn new_with_timeout(rpc_url: impl Into<String>, timeout: Duration) -> Self {
         let http_client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(10))
+            .timeout(timeout)
             .redirect(reqwest::redirect::Policy::limited(3))
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
@@ -72,6 +174,16 @@ impl SorobanRpcClient {
             http_client,
             retry_policy: RetryPolicy::default(),
         }
+    }
+
+    /// Set a custom request timeout.
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.http_client = reqwest::Client::builder()
+            .timeout(timeout)
+            .redirect(reqwest::redirect::Policy::limited(3))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+        self
     }
 
     /// Create a `SorobanRpcClient` with a custom pre-configured `reqwest::Client`.
@@ -132,8 +244,8 @@ impl SorobanRpcClient {
                         || status == reqwest::StatusCode::SERVICE_UNAVAILABLE)
                         && attempt < self.retry_policy.max_retries
                     {
-                        let backoff =
-                            self.retry_policy.base_delay * 2u32.saturating_pow(attempt - 1);
+                        let retry_after = parse_retry_after(response.headers());
+                        let backoff = self.retry_policy.next_delay(attempt, retry_after);
                         tokio::time::sleep(backoff).await;
                         continue;
                     }
@@ -195,8 +307,7 @@ impl SorobanRpcClient {
                     // Retry on connect errors or timeouts if attempts remain
                     if (e.is_connect() || e.is_timeout()) && attempt < self.retry_policy.max_retries
                     {
-                        let backoff =
-                            self.retry_policy.base_delay * 2u32.saturating_pow(attempt - 1);
+                        let backoff = self.retry_policy.next_delay(attempt, None);
                         tokio::time::sleep(backoff).await;
                         continue;
                     }
@@ -262,6 +373,56 @@ impl LedgerReader for SorobanRpcClient {
 
         Ok(all_entries)
     }
+
+    async fn get_ledger_close_velocity(&self, latest_ledger: u32) -> SentinelResult<Option<f64>> {
+        if latest_ledger < 2 {
+            return Ok(None);
+        }
+
+        // Sample up to the last 100 ledgers
+        let sample_limit = 100u32;
+        let start_ledger = latest_ledger.saturating_sub(sample_limit - 1).max(1);
+
+        let params = GetLedgersParams {
+            start_ledger,
+            pagination: PaginationLimit {
+                limit: sample_limit,
+            },
+        };
+
+        let result: Result<GetLedgersResult, _> = self.send_rpc_request("getLedgers", params).await;
+        let ledgers = match result {
+            Ok(res) => res.ledgers.unwrap_or_default(),
+            Err(_) => return Ok(None), // -32601 Method not found, or any transport error falls back
+        };
+
+        if ledgers.len() < 2 {
+            return Ok(None);
+        }
+
+        let first = &ledgers[0];
+        let last = &ledgers[ledgers.len() - 1];
+
+        let (Some(t_first), Some(t_last)) = (first.ledger_close_time, last.ledger_close_time)
+        else {
+            return Ok(None);
+        };
+
+        if last.sequence <= first.sequence || t_last <= t_first {
+            return Ok(None);
+        }
+
+        let delta_seq = (last.sequence - first.sequence) as f64;
+        let delta_time = (t_last - t_first) as f64;
+        let velocity = delta_time / delta_seq;
+
+        // Plausibility check: between 1.0s and 60.0s
+        if (1.0..=60.0).contains(&velocity) {
+            Ok(Some(velocity))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 // --- Wire format DTOs ---
@@ -321,6 +482,51 @@ struct RpcLedgerEntryItem {
     live_until_ledger_seq: Option<u32>,
     #[serde(default)]
     last_modified_ledger_seq: Option<u32>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GetLedgersParams {
+    start_ledger: u32,
+    pagination: PaginationLimit,
+}
+
+#[derive(Debug, Serialize)]
+struct PaginationLimit {
+    limit: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct GetLedgersResult {
+    #[serde(default)]
+    ledgers: Option<Vec<RpcLedgerItem>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RpcLedgerItem {
+    sequence: u32,
+    #[serde(deserialize_with = "deserialize_close_time_opt")]
+    ledger_close_time: Option<i64>,
+}
+
+fn deserialize_close_time_opt<'de, D>(deserializer: D) -> Result<Option<i64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Deserialize;
+    let v = Option::<serde_json::Value>::deserialize(deserializer)?;
+    match v {
+        Some(serde_json::Value::String(s)) => {
+            if let Ok(n) = s.parse::<i64>() {
+                Ok(Some(n))
+            } else {
+                Ok(None)
+            }
+        }
+        Some(serde_json::Value::Number(num)) => Ok(num.as_i64()),
+        _ => Ok(None),
+    }
 }
 
 #[cfg(test)]
@@ -542,5 +748,150 @@ mod tests {
             res,
             Err(SentinelError::RpcResponseError { code: 500, .. })
         ));
+    }
+
+    #[test]
+    fn test_retry_policy_next_delay_and_capping() {
+        let policy = RetryPolicy {
+            max_retries: 5,
+            base_delay: Duration::from_millis(100),
+            max_delay: Duration::from_millis(1000),
+            jitter: Jitter::None,
+            seed: None,
+        };
+
+        // attempt 1: 100ms * 2^0 = 100ms
+        assert_eq!(policy.next_delay(1, None), Duration::from_millis(100));
+        // attempt 2: 100ms * 2^1 = 200ms
+        assert_eq!(policy.next_delay(2, None), Duration::from_millis(200));
+        // attempt 3: 100ms * 2^2 = 400ms
+        assert_eq!(policy.next_delay(3, None), Duration::from_millis(400));
+        // attempt 4: 100ms * 2^3 = 800ms
+        assert_eq!(policy.next_delay(4, None), Duration::from_millis(800));
+        // attempt 5: 100ms * 2^4 = 1600ms -> capped to 1000ms
+        assert_eq!(policy.next_delay(5, None), Duration::from_millis(1000));
+        // attempt 10: capped to 1000ms
+        assert_eq!(policy.next_delay(10, None), Duration::from_millis(1000));
+
+        // Retry-After honoured
+        assert_eq!(
+            policy.next_delay(1, Some(Duration::from_millis(500))),
+            Duration::from_millis(500)
+        );
+
+        // Retry-After clamped to max_delay
+        assert_eq!(
+            policy.next_delay(1, Some(Duration::from_millis(5000))),
+            Duration::from_millis(1000)
+        );
+    }
+
+    #[test]
+    fn test_retry_policy_jitter_determinism_with_seed() {
+        let policy = RetryPolicy {
+            max_retries: 3,
+            base_delay: Duration::from_millis(100),
+            max_delay: Duration::from_millis(1000),
+            jitter: Jitter::Full,
+            seed: Some(42),
+        };
+
+        let delay1 = policy.next_delay(2, None);
+        let delay2 = policy.next_delay(2, None);
+        assert_eq!(delay1, delay2); // Seeded jitter is deterministic
+        assert!(delay1 <= Duration::from_millis(200));
+    }
+
+    #[tokio::test]
+    async fn test_wiremock_get_ledgers_velocity_success() {
+        let mock_server = MockServer::start().await;
+
+        let response_body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "ledgers": [
+                    {
+                        "sequence": 5399901,
+                        "ledgerCloseTime": "1700000000"
+                    },
+                    {
+                        "sequence": 5400000,
+                        "ledgerCloseTime": "1700000500"
+                    }
+                ]
+            }
+        });
+
+        Mock::given(method("POST"))
+            .and(path("/"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response_body))
+            .mount(&mock_server)
+            .await;
+
+        let client = SorobanRpcClient::new(mock_server.uri());
+        let velocity = client.get_ledger_close_velocity(5400000).await.unwrap();
+
+        // (1700000500 - 1700000000) / (5400000 - 5399901) = 500 / 99 ~= 5.0505
+        assert!(velocity.is_some());
+        let v = velocity.unwrap();
+        assert!((v - 5.0505).abs() < 1e-3);
+    }
+
+    #[tokio::test]
+    async fn test_wiremock_get_ledgers_method_not_found_fallback() {
+        let mock_server = MockServer::start().await;
+
+        let response_body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "error": {
+                "code": -32601,
+                "message": "Method not found"
+            }
+        });
+
+        Mock::given(method("POST"))
+            .and(path("/"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response_body))
+            .mount(&mock_server)
+            .await;
+
+        let client = SorobanRpcClient::new(mock_server.uri());
+        let velocity = client.get_ledger_close_velocity(5400000).await.unwrap();
+        // Method not found returns Ok(None), so scan falls back to 5.0s
+        assert_eq!(velocity, None);
+    }
+
+    #[tokio::test]
+    async fn test_wiremock_get_ledgers_malformed_close_time_fallback() {
+        let mock_server = MockServer::start().await;
+
+        let response_body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "ledgers": [
+                    {
+                        "sequence": 5399901,
+                        "ledgerCloseTime": "not-a-number"
+                    },
+                    {
+                        "sequence": 5400000,
+                        "ledgerCloseTime": "not-a-number-either"
+                    }
+                ]
+            }
+        });
+
+        Mock::given(method("POST"))
+            .and(path("/"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response_body))
+            .mount(&mock_server)
+            .await;
+
+        let client = SorobanRpcClient::new(mock_server.uri());
+        let velocity = client.get_ledger_close_velocity(5400000).await.unwrap();
+        assert_eq!(velocity, None);
     }
 }

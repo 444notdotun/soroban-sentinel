@@ -135,6 +135,61 @@ sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
   --key COUNTER
 ```
 
+### Composite Storage Key Expressions (`--key-expr`)
+Soroban contracts commonly key map storage with composite enum types like `DataKey::Balance(Address)`. These encode as nested vectors (`ScVal::Vec([Symbol("Balance"), Address(..)])`). Instead of hand-crafting base64 XDR for `--key-xdr`, you can query them using `--key-expr`:
+
+```bash
+# Single symbol or address key expression
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  --key-expr "sym:Balance"
+
+# Composite tuple / map key with nested vector and contract address
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  --key-expr "vec[sym:Balance, addr:CA3D5NXQ6DNG5BB25US67P3J6R74V4A7N5E55LFEV74J5R4R37E2L6G5]"
+```
+
+#### Supported Key Expression Grammar:
+| Prefix | Description | Example |
+| :--- | :--- | :--- |
+| `sym:` | Symbol (up to 32 alphanumeric/underscore characters) | `sym:Balance` |
+| `str:` | UTF-8 String | `str:AdminKey` |
+| `u32:`, `i32:` | 32-bit unsigned and signed integers | `u32:42`, `i32:-10` |
+| `u64:`, `i64:` | 64-bit unsigned and signed integers | `u64:1000000`, `i64:-500` |
+| `u128:` | 128-bit unsigned integer | `u128:340282366920938463463374607431768211455` |
+| `bool:` | Boolean value (`true` or `false`) | `bool:true` |
+| `addr:` | Account (`G...`) or Contract (`C...`) Strkey address | `addr:GABC...`, `addr:CDLZ...` |
+| `bytes:` | Hex-encoded raw byte array | `bytes:deadbeef`, `bytes:0x1234` |
+| `vec[...]` | Nested composite vector (up to 16 nesting levels) | `vec[sym:Allowance, addr:G..., addr:C...]` |
+
+### Baseline Scan Comparison & Regression Gating (`--baseline`)
+Track storage decay and detect changes between inspection intervals by comparing a scan against a previous JSON report:
+
+```bash
+# Save a baseline scan
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC --format json > baseline.json
+
+# Later: compare current state against baseline
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  --baseline baseline.json
+
+# CI Regression Gate: fail with exit code 2 if any entry regressed (status worsened or entry removed)
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  --baseline baseline.json \
+  --fail-on-regression
+```
+
+### Advanced RPC & Velocity Options
+```bash
+# Configure RPC timeout (1–120s) and retry attempts (0–10) with exponential backoff & jitter
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  --rpc-timeout 30 \
+  --rpc-max-retries 5
+
+# Override measured ledger close velocity (1.0–60.0s)
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  --ledger-seconds 5.8
+```
+
 *Actual Terminal Output:*
 ```text
 Contract: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC | Network: testnet | Latest Ledger: 5,303,220 (Velocity: 5.0s/ledger)
@@ -192,7 +247,7 @@ sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
 | :---: | :--- | :--- |
 | `0` | **Success / OK** | All evaluated storage entries have `status == OK` |
 | `1` | **Warning** | One or more evaluated storage entries have `status == WARN` |
-| `2` | **Critical / Archived** | One or more evaluated entries have `status == CRITICAL` or `ARCHIVED` |
+| `2` | **Critical / Archived / Regression** | One or more evaluated entries have `status == CRITICAL` or `ARCHIVED`, or `--fail-on-regression` triggered by status worsening / entry removal |
 | `10` | **Invalid Arguments** | Malformed contract Strkey, unrecognized network, or invalid parameters |
 | `11` | **RPC Failure** | Network timeout, connection refused, or HTTP 5xx/4xx RPC communication failure |
 

@@ -47,6 +47,10 @@ pub struct ScanArgs {
     #[arg(long = "key-xdr", value_name = "BASE64_XDR")]
     pub key_xdr: Vec<String>,
 
+    /// Persistent storage key encoded as typed expression (can be specified multiple times, e.g. "sym:Balance", "vec[sym:Balance, addr:G...]")
+    #[arg(long = "key-expr", value_name = "EXPR")]
+    pub key_expr: Vec<String>,
+
     /// Warning threshold in ledgers below which entries trigger WARN status (defaults to 120,960 ledgers ≈ 7 days)
     #[arg(long, default_value_t = 120960, value_name = "LEDGERS")]
     pub threshold: u32,
@@ -54,6 +58,26 @@ pub struct ScanArgs {
     /// Critical threshold in ledgers below which entries trigger CRITICAL status (defaults to 34,560 ledgers ≈ 2 days, or threshold / 3 if threshold <= 34,560)
     #[arg(long, value_name = "LEDGERS")]
     pub critical_threshold: Option<u32>,
+
+    /// Custom RPC request timeout in seconds (1–120, defaults to 10)
+    #[arg(long = "rpc-timeout", value_name = "SECS")]
+    pub rpc_timeout: Option<u64>,
+
+    /// Maximum RPC retry attempts for transient errors (0–10, defaults to 3)
+    #[arg(long = "rpc-max-retries", value_name = "N")]
+    pub rpc_max_retries: Option<u32>,
+
+    /// Override ledger close velocity in seconds per ledger (1.0–60.0)
+    #[arg(long = "ledger-seconds", value_name = "SECS")]
+    pub ledger_seconds: Option<f64>,
+
+    /// Path to a previous JSON scan report baseline file for comparison
+    #[arg(long = "baseline", value_name = "PATH")]
+    pub baseline: Option<String>,
+
+    /// Return exit code 2 if any entry regressed in risk status or was removed compared to baseline
+    #[arg(long = "fail-on-regression")]
+    pub fail_on_regression: bool,
 }
 
 #[cfg(test)]
@@ -79,6 +103,12 @@ mod tests {
                 assert!(scan.rpc_url.is_none());
                 assert!(scan.key.is_empty());
                 assert!(scan.key_xdr.is_empty());
+                assert!(scan.key_expr.is_empty());
+                assert!(scan.rpc_timeout.is_none());
+                assert!(scan.rpc_max_retries.is_none());
+                assert!(scan.ledger_seconds.is_none());
+                assert!(scan.baseline.is_none());
+                assert!(!scan.fail_on_regression);
             }
         }
     }
@@ -103,6 +133,19 @@ mod tests {
             "ADMIN",
             "--key-xdr",
             "AAAAFA==",
+            "--key-expr",
+            "sym:Balance",
+            "--key-expr",
+            "vec[sym:Data, u32:1]",
+            "--rpc-timeout",
+            "30",
+            "--rpc-max-retries",
+            "5",
+            "--ledger-seconds",
+            "5.5",
+            "--baseline",
+            "baseline.json",
+            "--fail-on-regression",
         ]);
 
         match args.command {
@@ -120,6 +163,12 @@ mod tests {
                 assert_eq!(scan.threshold, 50000);
                 assert_eq!(scan.key, vec!["COUNTER", "ADMIN"]);
                 assert_eq!(scan.key_xdr, vec!["AAAAFA=="]);
+                assert_eq!(scan.key_expr, vec!["sym:Balance", "vec[sym:Data, u32:1]"]);
+                assert_eq!(scan.rpc_timeout, Some(30));
+                assert_eq!(scan.rpc_max_retries, Some(5));
+                assert_eq!(scan.ledger_seconds, Some(5.5));
+                assert_eq!(scan.baseline.as_deref(), Some("baseline.json"));
+                assert!(scan.fail_on_regression);
             }
         }
     }
