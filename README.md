@@ -207,14 +207,14 @@ For complete architectural specifications, product requirements, and contributio
 * [Implementation Roadmap](docs/IMPLEMENTATION_ROADMAP.md) — Ordered sprint phases, milestone deliverables, and effort estimates.
 * [Testing Strategy](docs/TESTING_STRATEGY.md) — Isolated domain unit tests, mock RPC tests, and CLI acceptance harnesses.
 * [Security & Operational Safety](docs/SECURITY.md) — Threat model, read-only guarantees, secret management, and keeper transaction limits.
-* [Open Source Contribution Plan](docs/OPEN_SOURCE_CONTRIBUTION_PLAN.md) — Drips Wave backlog, complexity point breakdown, and contribution workflow.
+* [Open Source Contribution Plan](docs/OPEN_SOURCE_CONTRIBUTION_PLAN.md) — Drips Wave workflow, complexity levels, and how to find open issues.
 * [Research & References](docs/RESEARCH_AND_REFERENCES.md) — Verifiable findings, official Stellar source code references, and competitive analysis.
 
 ---
 
 ## 7. Contributing to Soroban Sentinel
 
-`soroban-sentinel` is designed to be a premier collaborative project within the **Stellar Drips Wave Program**. We maintain a transparent backlog of well-scoped issues categorized by difficulty:
+`soroban-sentinel` is designed to be a premier collaborative project within the **Stellar Drips Wave Program**. Well-scoped work is tracked in [GitHub Issues](https://github.com/ekwe7/soroban-sentinel/issues) and categorized by difficulty:
 * **Trivial (100 Points)**: JSON/Markdown output formatters, CLI parameter validation, documentation improvements.
 * **Medium (150 Points)**: Storage key parsers, webhook payload builders, Prometheus metric collectors.
 * **High (200 Points)**: RPC rate-limiting middleware, transaction simulation fee estimator, autonomous keeper safety bounds.
