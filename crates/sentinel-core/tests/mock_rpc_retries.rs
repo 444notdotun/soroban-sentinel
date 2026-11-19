@@ -42,6 +42,7 @@ async fn test_retry_recovery_after_two_http_503_failures() {
     let client = SorobanRpcClient::new(mock_server.uri()).with_retry_policy(RetryPolicy {
         max_retries: 3,
         base_delay: Duration::from_millis(5),
+        ..Default::default()
     });
 
     let ledger_info = client
@@ -90,6 +91,7 @@ async fn test_retry_recovery_after_http_429_rate_limiting() {
     let client = SorobanRpcClient::new(mock_server.uri()).with_retry_policy(RetryPolicy {
         max_retries: 3,
         base_delay: Duration::from_millis(5),
+        ..Default::default()
     });
 
     let ledger_info = client
@@ -118,6 +120,7 @@ async fn test_retry_exhaustion_propagates_error() {
     let client = SorobanRpcClient::new(mock_server.uri()).with_retry_policy(RetryPolicy {
         max_retries: 3,
         base_delay: Duration::from_millis(5),
+        ..Default::default()
     });
 
     let result = client.get_latest_ledger().await;
@@ -132,4 +135,157 @@ async fn test_retry_exhaustion_propagates_error() {
     );
 
     mock_server.verify().await;
+}
+
+#[tokio::test]
+async fn test_retry_after_header_is_honoured() {
+    let mock_server = MockServer::start().await;
+
+    let call_count = Arc::new(AtomicU32::new(0));
+    let call_count_clone = Arc::clone(&call_count);
+
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .respond_with(move |_: &wiremock::Request| {
+            let attempt = call_count_clone.fetch_add(1, Ordering::SeqCst) + 1;
+            if attempt == 1 {
+                // Return 429 with Retry-After: 0 seconds (valid delta-seconds)
+                ResponseTemplate::new(429).append_header("Retry-After", "0")
+            } else {
+                let body = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": {
+                        "sequence": 7000000,
+                        "protocolVersion": 22
+                    }
+                });
+                ResponseTemplate::new(200).set_body_json(body)
+            }
+        })
+        .expect(2)
+        .mount(&mock_server)
+        .await;
+
+    let client = SorobanRpcClient::new(mock_server.uri())
+        .with_retry_policy(RetryPolicy::default().with_max_delay(Duration::from_millis(50)));
+
+    let ledger_info = client
+        .get_latest_ledger()
+        .await
+        .expect("Should succeed after honoured Retry-After");
+
+    assert_eq!(ledger_info.sequence, 7000000);
+    assert_eq!(call_count.load(Ordering::SeqCst), 2);
+    mock_server.verify().await;
+}
+
+#[tokio::test]
+async fn test_retry_after_header_clamped_to_max_delay() {
+    let mock_server = MockServer::start().await;
+
+    let call_count = Arc::new(AtomicU32::new(0));
+    let call_count_clone = Arc::clone(&call_count);
+
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .respond_with(move |_: &wiremock::Request| {
+            let attempt = call_count_clone.fetch_add(1, Ordering::SeqCst) + 1;
+            if attempt == 1 {
+                // Hostile server specifies 86400s (24 hours)
+                ResponseTemplate::new(429).append_header("Retry-After", "86400")
+            } else {
+                let body = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": {
+                        "sequence": 8000000,
+                        "protocolVersion": 22
+                    }
+                });
+                ResponseTemplate::new(200).set_body_json(body)
+            }
+        })
+        .expect(2)
+        .mount(&mock_server)
+        .await;
+
+    let start = std::time::Instant::now();
+    // Clamped to 10ms max_delay
+    let client = SorobanRpcClient::new(mock_server.uri())
+        .with_retry_policy(RetryPolicy::default().with_max_delay(Duration::from_millis(10)));
+
+    let ledger_info = client
+        .get_latest_ledger()
+        .await
+        .expect("Should succeed quickly because hostile Retry-After was clamped to max_delay");
+
+    assert_eq!(ledger_info.sequence, 8000000);
+    assert_eq!(call_count.load(Ordering::SeqCst), 2);
+    assert!(start.elapsed() < Duration::from_secs(5));
+    mock_server.verify().await;
+}
+
+#[tokio::test]
+async fn test_attempt_count_equals_configured_retries() {
+    let mock_server = MockServer::start().await;
+
+    // Configured max attempts = 4
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .respond_with(ResponseTemplate::new(503))
+        .expect(4)
+        .mount(&mock_server)
+        .await;
+
+    let policy = RetryPolicy {
+        max_retries: 4,
+        base_delay: Duration::from_millis(5),
+        ..Default::default()
+    };
+
+    let client = SorobanRpcClient::new(mock_server.uri()).with_retry_policy(policy);
+
+    let result = client.get_latest_ledger().await;
+    assert!(matches!(
+        result,
+        Err(SentinelError::RpcResponseError { code: 503, .. })
+    ));
+
+    mock_server.verify().await;
+}
+
+#[tokio::test]
+async fn test_request_timeout_fires_with_configured_value() {
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": { "sequence": 9000000, "protocolVersion": 22 }
+                }))
+                .set_delay(Duration::from_millis(300)),
+        )
+        .mount(&mock_server)
+        .await;
+
+    // Request timeout configured to 50ms (less than server delay of 300ms)
+    let policy = RetryPolicy {
+        max_retries: 1, // 1 attempt only
+        ..Default::default()
+    };
+
+    let client = SorobanRpcClient::new_with_timeout(mock_server.uri(), Duration::from_millis(50))
+        .with_retry_policy(policy);
+
+    let result = client.get_latest_ledger().await;
+    assert!(
+        matches!(result, Err(SentinelError::RpcConnectionTimeout(_))),
+        "Expected timeout error, got: {:?}",
+        result
+    );
 }

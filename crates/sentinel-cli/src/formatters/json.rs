@@ -1,5 +1,6 @@
 //! Machine-readable JSON output formatter for contract scan reports.
 
+use sentinel_core::domain::compare::BaselineDiff;
 use sentinel_core::error::{SentinelError, SentinelResult};
 use sentinel_core::usecases::TTLReport;
 use serde::{Deserialize, Serialize};
@@ -19,6 +20,9 @@ pub struct JsonTTLReport {
     pub summary: JsonSummary,
     /// Detailed list of evaluated storage entries.
     pub entries: Vec<JsonEntryReport>,
+    /// Optional comparison against a baseline report.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub changes: Option<BaselineDiff>,
 }
 
 /// Numerical summary counts conforming to published JSON schema.
@@ -96,13 +100,23 @@ impl From<&TTLReport> for JsonTTLReport {
             ledger_velocity_seconds: report.ledger_velocity_seconds,
             summary: json_summary,
             entries: json_entries,
+            changes: None,
         }
     }
 }
 
 /// Renders a `TTLReport` into strict, pretty-printed JSON conforming to published schema.
 pub fn render_json(report: &TTLReport) -> SentinelResult<String> {
-    let json_report = JsonTTLReport::from(report);
+    render_json_with_diff(report, None)
+}
+
+/// Renders a `TTLReport` and optional `BaselineDiff` into pretty-printed JSON.
+pub fn render_json_with_diff(
+    report: &TTLReport,
+    changes: Option<BaselineDiff>,
+) -> SentinelResult<String> {
+    let mut json_report = JsonTTLReport::from(report);
+    json_report.changes = changes;
     serde_json::to_string_pretty(&json_report).map_err(|e| {
         SentinelError::SerializationError(format!("Failed to serialize report to JSON: {}", e))
     })

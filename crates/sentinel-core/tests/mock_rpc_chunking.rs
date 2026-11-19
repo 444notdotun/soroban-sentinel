@@ -54,6 +54,7 @@ async fn test_rpc_chunking_with_250_keys() {
     let client = SorobanRpcClient::new(mock_server.uri()).with_retry_policy(RetryPolicy {
         max_retries: 1,
         base_delay: Duration::from_millis(1),
+        ..Default::default()
     });
 
     let results = client

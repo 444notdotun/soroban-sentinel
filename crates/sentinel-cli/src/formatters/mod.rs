@@ -3,5 +3,5 @@
 pub mod json;
 pub mod text;
 
-pub use json::{render_json, JsonEntryReport, JsonSummary, JsonTTLReport};
-pub use text::{format_with_commas, render_text};
+pub use json::{render_json, render_json_with_diff, JsonEntryReport, JsonSummary, JsonTTLReport};
+pub use text::{format_with_commas, render_text, render_text_with_diff};

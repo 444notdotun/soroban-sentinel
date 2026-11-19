@@ -12,6 +12,7 @@ use crate::ports::reader::{LatestLedgerInfo, LedgerReader, RawLedgerEntry};
 pub struct MockLedgerReader {
     latest_ledger: Arc<Mutex<Option<LatestLedgerInfo>>>,
     entries: Arc<Mutex<Vec<RawLedgerEntry>>>,
+    velocity: Arc<Mutex<Option<f64>>>,
     injected_error: Arc<Mutex<Option<SentinelError>>>,
 }
 
@@ -25,6 +26,12 @@ impl MockLedgerReader {
     pub fn with_latest_ledger(self, sequence: u32, protocol_version: u32) -> Self {
         *self.latest_ledger.lock().unwrap() =
             Some(LatestLedgerInfo::new(sequence, protocol_version));
+        self
+    }
+
+    /// Set the stubbed ledger close velocity in seconds per ledger.
+    pub fn with_velocity(self, velocity: f64) -> Self {
+        *self.velocity.lock().unwrap() = Some(velocity);
         self
     }
 
@@ -76,6 +83,13 @@ impl LedgerReader for MockLedgerReader {
             .cloned()
             .collect();
         Ok(matched)
+    }
+
+    async fn get_ledger_close_velocity(&self, _latest_ledger: u32) -> SentinelResult<Option<f64>> {
+        if let Some(err) = self.injected_error.lock().unwrap().clone() {
+            return Err(err);
+        }
+        Ok(*self.velocity.lock().unwrap())
     }
 }
 

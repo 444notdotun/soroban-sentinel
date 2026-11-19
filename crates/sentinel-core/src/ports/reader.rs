@@ -67,4 +67,10 @@ pub trait LedgerReader: Send + Sync {
         &self,
         keys_xdr_base64: &[String],
     ) -> SentinelResult<Vec<RawLedgerEntry>>;
+
+    /// Returns the measured ledger close velocity in seconds per ledger, if supported.
+    async fn get_ledger_close_velocity(&self, latest_ledger: u32) -> SentinelResult<Option<f64>> {
+        let _ = latest_ledger;
+        Ok(None)
+    }
 }

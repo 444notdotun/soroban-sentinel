@@ -18,14 +18,24 @@ pub fn calculate_remaining_ledgers(live_until: u32, latest_ledger: u32) -> i64 {
     (live_until as i64) - (latest_ledger as i64)
 }
 
-/// Estimates remaining wall-clock seconds until expiration based on target ledger close speed.
+/// Estimates remaining wall-clock seconds until expiration based on a specified ledger close velocity.
 ///
 /// Returns `0.0` if `remaining_ledgers <= 0`.
-pub fn estimate_remaining_seconds(remaining_ledgers: i64) -> f64 {
+pub fn estimate_remaining_seconds_with_velocity(
+    remaining_ledgers: i64,
+    ledger_velocity_seconds: f64,
+) -> f64 {
     if remaining_ledgers <= 0 {
         return 0.0;
     }
-    (remaining_ledgers as f64) * TARGET_LEDGER_CLOSE_SECONDS
+    (remaining_ledgers as f64) * ledger_velocity_seconds
+}
+
+/// Estimates remaining wall-clock seconds until expiration based on target ledger close speed (5.0s).
+///
+/// Returns `0.0` if `remaining_ledgers <= 0`.
+pub fn estimate_remaining_seconds(remaining_ledgers: i64) -> f64 {
+    estimate_remaining_seconds_with_velocity(remaining_ledgers, TARGET_LEDGER_CLOSE_SECONDS)
 }
 
 /// Estimates remaining wall-clock days given remaining seconds.
@@ -38,11 +48,21 @@ pub fn estimate_remaining_days(remaining_seconds: f64) -> f64 {
     remaining_seconds / SECONDS_PER_DAY
 }
 
-/// Calculates estimated remaining horizon in days directly from ledger sequence boundaries.
-pub fn estimate_horizon_days(live_until: u32, latest_ledger: u32) -> f64 {
+/// Calculates estimated remaining horizon in days directly from ledger sequence boundaries using a specified velocity.
+pub fn estimate_horizon_days_with_velocity(
+    live_until: u32,
+    latest_ledger: u32,
+    ledger_velocity_seconds: f64,
+) -> f64 {
     let remaining_ledgers = calculate_remaining_ledgers(live_until, latest_ledger);
-    let remaining_seconds = estimate_remaining_seconds(remaining_ledgers);
+    let remaining_seconds =
+        estimate_remaining_seconds_with_velocity(remaining_ledgers, ledger_velocity_seconds);
     estimate_remaining_days(remaining_seconds)
+}
+
+/// Calculates estimated remaining horizon in days directly from ledger sequence boundaries using target close speed (5.0s).
+pub fn estimate_horizon_days(live_until: u32, latest_ledger: u32) -> f64 {
+    estimate_horizon_days_with_velocity(live_until, latest_ledger, TARGET_LEDGER_CLOSE_SECONDS)
 }
 
 #[cfg(test)]
@@ -111,5 +131,25 @@ mod tests {
 
         let days = estimate_remaining_days(seconds);
         assert_eq!(days, 0.0);
+    }
+
+    #[test]
+    fn test_velocity_parameterized_math() {
+        let remaining_ledgers = 100_000;
+        let velocity = 6.2; // Real network close speed: 6.2s
+
+        let seconds = estimate_remaining_seconds_with_velocity(remaining_ledgers, velocity);
+        assert_eq!(seconds, 620_000.0);
+
+        let days = estimate_remaining_days(seconds);
+        // 620,000 / 86,400 ~= 7.1759259...
+        assert!((days - 7.175926).abs() < 1e-4);
+
+        let direct_days = estimate_horizon_days_with_velocity(5_500_000, 5_400_000, velocity);
+        assert_eq!(days, direct_days);
+
+        // Boundary cases
+        assert_eq!(estimate_remaining_seconds_with_velocity(0, velocity), 0.0);
+        assert_eq!(estimate_remaining_seconds_with_velocity(-10, velocity), 0.0);
     }
 }

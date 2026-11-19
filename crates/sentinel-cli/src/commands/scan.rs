@@ -1,12 +1,17 @@
 //! Execution logic for the `sentinel scan` CLI command.
 
+use std::fs;
+use std::path::Path;
+use std::time::Duration;
+
 use sentinel_core::adapters::{validate_rpc_url, SorobanRpcClient};
+use sentinel_core::domain::compare::{compare_reports, BaselineSnapshot, MAX_BASELINE_FILE_BYTES};
 use sentinel_core::domain::{RiskLevel, ThresholdConfig, DEFAULT_CRITICAL_LEDGERS};
 use sentinel_core::error::SentinelError;
 use sentinel_core::usecases::{ScanContractUseCase, ScanRequest};
 
 use crate::args::ScanArgs;
-use crate::formatters::{render_json, render_text};
+use crate::formatters::{render_json_with_diff, render_text_with_diff};
 
 /// Exit code: All evaluated storage entries have status OK.
 pub const EXIT_OK: i32 = 0;
@@ -39,11 +44,6 @@ pub fn resolve_rpc_url(network: &str, rpc_url_override: Option<&str>) -> Result<
 }
 
 /// Resolves and validates a sound threshold configuration.
-///
-/// If `critical_threshold_opt` is not explicitly provided:
-/// - If `warning_threshold > DEFAULT_CRITICAL_LEDGERS`, uses `DEFAULT_CRITICAL_LEDGERS`.
-/// - If `warning_threshold <= DEFAULT_CRITICAL_LEDGERS`, dynamically scales critical threshold
-///   to `std::cmp::max(1, warning_threshold / 3)` so warning state is never bypassed.
 pub fn resolve_threshold_config(
     warning_threshold: u32,
     critical_threshold_opt: Option<u32>,
@@ -66,8 +66,105 @@ pub fn resolve_threshold_config(
     ThresholdConfig::try_new(warning_threshold, critical_ledgers).map_err(|e| e.to_string())
 }
 
+/// Loads and validates a baseline JSON file against the target contract and network before running queries.
+pub fn load_and_validate_baseline(
+    baseline_path_str: &str,
+    target_contract_id: &str,
+    target_network: &str,
+) -> Result<BaselineSnapshot, String> {
+    let path = Path::new(baseline_path_str);
+    if !path.exists() {
+        return Err(format!("Baseline file '{}' not found", baseline_path_str));
+    }
+
+    let metadata = fs::metadata(path).map_err(|e| {
+        format!(
+            "Failed to read metadata for baseline file '{}': {}",
+            baseline_path_str, e
+        )
+    })?;
+
+    if metadata.len() > MAX_BASELINE_FILE_BYTES {
+        return Err(format!(
+            "Baseline file '{}' exceeds maximum allowed size of {} bytes (size: {} bytes)",
+            baseline_path_str,
+            MAX_BASELINE_FILE_BYTES,
+            metadata.len()
+        ));
+    }
+
+    let contents = fs::read_to_string(path).map_err(|e| {
+        format!(
+            "Failed to read baseline file '{}': {}",
+            baseline_path_str, e
+        )
+    })?;
+
+    let snapshot: BaselineSnapshot = serde_json::from_str(&contents)
+        .map_err(|e| format!("Malformed baseline JSON in '{}': {}", baseline_path_str, e))?;
+
+    if snapshot.contract_id != target_contract_id {
+        return Err(format!(
+            "Baseline contract ID '{}' does not match target contract ID '{}'",
+            snapshot.contract_id, target_contract_id
+        ));
+    }
+
+    if !snapshot.network.eq_ignore_ascii_case(target_network) {
+        return Err(format!(
+            "Baseline network '{}' does not match target network '{}'",
+            snapshot.network, target_network
+        ));
+    }
+
+    Ok(snapshot)
+}
+
 /// Executes the contract scan command and returns the appropriate UNIX exit code.
 pub async fn run_scan(args: ScanArgs) -> i32 {
+    // 1. Validate argument bounds before making any RPC calls
+    if let Some(timeout) = args.rpc_timeout {
+        if !(1..=120).contains(&timeout) {
+            eprintln!(
+                "Error: --rpc-timeout must be between 1 and 120 seconds (got {})",
+                timeout
+            );
+            return EXIT_INVALID_ARGS;
+        }
+    }
+
+    if let Some(retries) = args.rpc_max_retries {
+        if retries > 10 {
+            eprintln!(
+                "Error: --rpc-max-retries must be between 0 and 10 (got {})",
+                retries
+            );
+            return EXIT_INVALID_ARGS;
+        }
+    }
+
+    if let Some(ledger_seconds) = args.ledger_seconds {
+        if !(1.0..=60.0).contains(&ledger_seconds) {
+            eprintln!(
+                "Error: --ledger-seconds must be between 1.0 and 60.0 (got {})",
+                ledger_seconds
+            );
+            return EXIT_INVALID_ARGS;
+        }
+    }
+
+    let baseline_snapshot = if let Some(ref path) = args.baseline {
+        match load_and_validate_baseline(path, &args.contract_id, &args.network) {
+            Ok(s) => Some(s),
+            Err(err) => {
+                eprintln!("Error: {}", err);
+                return EXIT_INVALID_ARGS;
+            }
+        }
+    } else {
+        None
+    };
+
     let rpc_url = match resolve_rpc_url(&args.network, args.rpc_url.as_deref()) {
         Ok(url) => url,
         Err(err) => {
@@ -84,14 +181,26 @@ pub async fn run_scan(args: ScanArgs) -> i32 {
         }
     };
 
-    let rpc_client = SorobanRpcClient::new(rpc_url);
+    let rpc_timeout = Duration::from_secs(args.rpc_timeout.unwrap_or(10));
+    let mut rpc_client = SorobanRpcClient::new_with_timeout(rpc_url, rpc_timeout);
+    if let Some(retries) = args.rpc_max_retries {
+        let mut policy = rpc_client.retry_policy().clone();
+        policy.max_retries = retries;
+        rpc_client = rpc_client.with_retry_policy(policy);
+    }
+
     let usecase = ScanContractUseCase::new(rpc_client);
 
-    let request = ScanRequest::new(&args.contract_id)
+    let mut request = ScanRequest::new(&args.contract_id)
         .with_network(&args.network)
         .with_threshold_config(threshold_config)
         .with_persistent_symbols(args.key)
-        .with_persistent_xdr_keys(args.key_xdr);
+        .with_persistent_xdr_keys(args.key_xdr)
+        .with_persistent_key_exprs(args.key_expr);
+
+    if let Some(ls) = args.ledger_seconds {
+        request = request.with_ledger_seconds(Some(ls));
+    }
 
     let report = match usecase.execute(request).await {
         Ok(r) => r,
@@ -110,9 +219,13 @@ pub async fn run_scan(args: ScanArgs) -> i32 {
         }
     };
 
+    let baseline_diff = baseline_snapshot
+        .as_ref()
+        .map(|b| compare_reports(&report, b));
+
     let output_result = match args.format.to_lowercase().as_str() {
-        "text" => Ok(render_text(&report)),
-        "json" => render_json(&report),
+        "text" => Ok(render_text_with_diff(&report, baseline_diff.as_ref())),
+        "json" => render_json_with_diff(&report, baseline_diff.clone()),
         other => {
             eprintln!(
                 "Error: Unsupported format '{}'. Supported formats: text, json",
@@ -125,10 +238,20 @@ pub async fn run_scan(args: ScanArgs) -> i32 {
     match output_result {
         Ok(output) => {
             println!("{}", output);
-            match report.overall_status {
-                RiskLevel::Ok => EXIT_OK,
-                RiskLevel::Warn => EXIT_WARN,
-                RiskLevel::Critical | RiskLevel::Archived => EXIT_CRITICAL_OR_ARCHIVED,
+
+            let diff_has_regression = baseline_diff
+                .as_ref()
+                .map(|d| d.summary.has_regression)
+                .unwrap_or(false);
+
+            if args.fail_on_regression && diff_has_regression {
+                EXIT_CRITICAL_OR_ARCHIVED
+            } else {
+                match report.overall_status {
+                    RiskLevel::Ok => EXIT_OK,
+                    RiskLevel::Warn => EXIT_WARN,
+                    RiskLevel::Critical | RiskLevel::Archived => EXIT_CRITICAL_OR_ARCHIVED,
+                }
             }
         }
         Err(err) => {
@@ -200,5 +323,63 @@ mod tests {
         // 5. Invalid: warning == 0 or critical == 0
         assert!(resolve_threshold_config(0, None).is_err());
         assert!(resolve_threshold_config(100, Some(0)).is_err());
+    }
+
+    #[test]
+    fn test_load_and_validate_baseline_validation() {
+        let temp_dir = std::env::temp_dir();
+        let valid_baseline_file = temp_dir.join("test_valid_baseline.json");
+        let valid_json = r#"{
+            "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+            "network": "testnet",
+            "latest_ledger": 5400000,
+            "entries": []
+        }"#;
+        fs::write(&valid_baseline_file, valid_json).unwrap();
+
+        // Valid load
+        let loaded = load_and_validate_baseline(
+            valid_baseline_file.to_str().unwrap(),
+            "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+            "testnet",
+        );
+        assert!(loaded.is_ok());
+
+        // Mismatched contract ID rejected
+        let err_contract = load_and_validate_baseline(
+            valid_baseline_file.to_str().unwrap(),
+            "CDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD2KM",
+            "testnet",
+        );
+        assert!(err_contract.is_err());
+        assert!(err_contract.unwrap_err().contains("contract ID"));
+
+        // Mismatched network rejected
+        let err_net = load_and_validate_baseline(
+            valid_baseline_file.to_str().unwrap(),
+            "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+            "mainnet",
+        );
+        assert!(err_net.is_err());
+        assert!(err_net.unwrap_err().contains("network"));
+
+        // Non-existent file rejected
+        assert!(load_and_validate_baseline("non_existent_file.json", "CAAA", "testnet").is_err());
+
+        // Malformed JSON rejected
+        let malformed_file = temp_dir.join("test_malformed_baseline.json");
+        fs::write(&malformed_file, "NOT VALID JSON").unwrap();
+        let err_malformed = load_and_validate_baseline(
+            malformed_file.to_str().unwrap(),
+            "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+            "testnet",
+        );
+        assert!(err_malformed.is_err());
+        assert!(err_malformed
+            .unwrap_err()
+            .contains("Malformed baseline JSON"));
+
+        let _ = fs::remove_file(valid_baseline_file);
+        let _ = fs::remove_file(malformed_file);
     }
 }
