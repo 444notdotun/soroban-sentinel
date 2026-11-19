@@ -1,5 +1,6 @@
 //! Core pure domain models and calculations.
 
+pub mod budget;
 pub mod compare;
 pub mod entry;
 pub mod risk;
