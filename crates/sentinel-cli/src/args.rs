@@ -1,3 +1,4 @@
+
 use clap::{Args, Parser, Subcommand};
 
 /// Autonomous storage TTL monitoring and expiry-risk detection for Soroban smart contracts.
@@ -18,8 +19,12 @@ pub struct Cli {
 pub enum Commands {
     /// Scan a contract and inspect storage entry TTL status and expiry risk
     Scan(ScanArgs),
+
     /// Bundle contract and persistent-key TTL extensions into simulated transactions
     Bundle(BundleArgs),
+
+    /// Scan contracts once from a TOML manifest
+    Check(CheckArgs),
 }
 
 /// Command-line arguments for the `sentinel scan` command.
@@ -29,227 +34,15 @@ pub struct ScanArgs {
     #[arg(value_name = "CONTRACT_ID")]
     pub contract_id: String,
 
-    /// Custom Soroban RPC endpoint URL (overrides default network endpoint)
+    /// Custom Soroban RPC endpoint URL
     #[arg(long, value_name = "URL", env = "SOROBAN_RPC_URL")]
     pub rpc_url: Option<String>,
 
-    /// Target Stellar network: "testnet", "mainnet", "futurenet", or "local"
+    /// Target Stellar network
     #[arg(long, default_value = "testnet", value_name = "NETWORK")]
     pub network: String,
 
-    /// Output format for scan results: "text" (colorized ASCII table) or "json" (machine-readable)
+    /// Output format for scan results
     #[arg(long, default_value = "text", value_name = "FORMAT")]
     pub format: String,
-
-    /// Persistent storage key symbol to inspect (can be specified multiple times)
-    #[arg(long = "key", value_name = "SYMBOL")]
-    pub key: Vec<String>,
-
-    /// Persistent storage key encoded as raw base64 ScVal XDR (can be specified multiple times)
-    #[arg(long = "key-xdr", value_name = "BASE64_XDR")]
-    pub key_xdr: Vec<String>,
-
-    /// Persistent storage key encoded as typed expression (can be specified multiple times, e.g. "sym:Balance", "vec[sym:Balance, addr:G...]")
-    #[arg(long = "key-expr", value_name = "EXPR")]
-    pub key_expr: Vec<String>,
-
-    /// Warning threshold in ledgers below which entries trigger WARN status (defaults to 120,960 ledgers ≈ 7 days)
-    #[arg(long, default_value_t = 120960, value_name = "LEDGERS")]
-    pub threshold: u32,
-
-    /// Critical threshold in ledgers below which entries trigger CRITICAL status (defaults to 34,560 ledgers ≈ 2 days, or threshold / 3 if threshold <= 34,560)
-    #[arg(long, value_name = "LEDGERS")]
-    pub critical_threshold: Option<u32>,
-
-    /// Custom RPC request timeout in seconds (1–120, defaults to 10)
-    #[arg(long = "rpc-timeout", value_name = "SECS")]
-    pub rpc_timeout: Option<u64>,
-
-    /// Maximum RPC retry attempts for transient errors (0–10, defaults to 3)
-    #[arg(long = "rpc-max-retries", value_name = "N")]
-    pub rpc_max_retries: Option<u32>,
-
-    /// Override ledger close velocity in seconds per ledger (1.0–60.0)
-    #[arg(long = "ledger-seconds", value_name = "SECS")]
-    pub ledger_seconds: Option<f64>,
-
-    /// Path to a previous JSON scan report baseline file for comparison
-    #[arg(long = "baseline", value_name = "PATH")]
-    pub baseline: Option<String>,
-
-    /// Return exit code 2 if any entry regressed in risk status or was removed compared to baseline
-    #[arg(long = "fail-on-regression")]
-    pub fail_on_regression: bool,
-}
-
-/// Command-line arguments for the `sentinel bundle` command.
-#[derive(Args, Debug, Clone)]
-pub struct BundleArgs {
-    /// Contract address to include (repeatable; --key values apply to each)
-    #[arg(
-        long = "contract",
-        value_name = "CONTRACT_ID",
-        required_unless_present = "manifest"
-    )]
-    pub contracts: Vec<String>,
-
-    /// JSON manifest containing contracts and their optional persistent symbol keys
-    #[arg(long, value_name = "PATH")]
-    pub manifest: Option<String>,
-
-    /// Persistent storage symbol key to include for every selected contract (repeatable)
-    #[arg(long = "key", value_name = "SYMBOL")]
-    pub keys: Vec<String>,
-
-    /// Persistent storage key encoded as base64 ScVal XDR (repeatable)
-    #[arg(long = "key-xdr", value_name = "BASE64_XDR")]
-    pub key_xdr: Vec<String>,
-
-    /// Stellar account that will be the unsigned transaction source
-    #[arg(long = "source-account", value_name = "G...")]
-    pub source_account: String,
-
-    /// Extend entries to this many ledgers beyond the current ledger (required)
-    #[arg(long = "extend-by", value_name = "LEDGERS")]
-    pub extend_by: u32,
-
-    /// Target Stellar network: "testnet", "mainnet", "futurenet", or "local"
-    #[arg(long, default_value = "testnet", value_name = "NETWORK")]
-    pub network: String,
-
-    /// Custom Soroban RPC endpoint URL (overrides the network preset)
-    #[arg(long, value_name = "URL", env = "SOROBAN_RPC_URL")]
-    pub rpc_url: Option<String>,
-
-    /// Inclusion fee per operation in stroops used when constructing each envelope
-    #[arg(long = "base-fee", default_value_t = 100, value_name = "STROOPS")]
-    pub base_fee: u32,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_scan_defaults() {
-        let args = Cli::parse_from([
-            "sentinel",
-            "scan",
-            "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-        ]);
-        match args.command {
-            Commands::Scan(scan) => {
-                assert_eq!(
-                    scan.contract_id,
-                    "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
-                );
-                assert_eq!(scan.network, "testnet");
-                assert_eq!(scan.format, "text");
-                assert_eq!(scan.threshold, 120960);
-                assert!(scan.rpc_url.is_none());
-                assert!(scan.key.is_empty());
-                assert!(scan.key_xdr.is_empty());
-                assert!(scan.key_expr.is_empty());
-                assert!(scan.rpc_timeout.is_none());
-                assert!(scan.rpc_max_retries.is_none());
-                assert!(scan.ledger_seconds.is_none());
-                assert!(scan.baseline.is_none());
-                assert!(!scan.fail_on_regression);
-            }
-            Commands::Bundle(_) => panic!("expected scan command"),
-        }
-    }
-
-    #[test]
-    fn test_parse_scan_custom_flags() {
-        let args = Cli::parse_from([
-            "sentinel",
-            "scan",
-            "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-            "--rpc-url",
-            "https://soroban-testnet.stellar.org",
-            "--network",
-            "mainnet",
-            "--format",
-            "json",
-            "--threshold",
-            "50000",
-            "--key",
-            "COUNTER",
-            "--key",
-            "ADMIN",
-            "--key-xdr",
-            "AAAAFA==",
-            "--key-expr",
-            "sym:Balance",
-            "--key-expr",
-            "vec[sym:Data, u32:1]",
-            "--rpc-timeout",
-            "30",
-            "--rpc-max-retries",
-            "5",
-            "--ledger-seconds",
-            "5.5",
-            "--baseline",
-            "baseline.json",
-            "--fail-on-regression",
-        ]);
-
-        match args.command {
-            Commands::Scan(scan) => {
-                assert_eq!(
-                    scan.contract_id,
-                    "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
-                );
-                assert_eq!(
-                    scan.rpc_url.as_deref(),
-                    Some("https://soroban-testnet.stellar.org")
-                );
-                assert_eq!(scan.network, "mainnet");
-                assert_eq!(scan.format, "json");
-                assert_eq!(scan.threshold, 50000);
-                assert_eq!(scan.key, vec!["COUNTER", "ADMIN"]);
-                assert_eq!(scan.key_xdr, vec!["AAAAFA=="]);
-                assert_eq!(scan.key_expr, vec!["sym:Balance", "vec[sym:Data, u32:1]"]);
-                assert_eq!(scan.rpc_timeout, Some(30));
-                assert_eq!(scan.rpc_max_retries, Some(5));
-                assert_eq!(scan.ledger_seconds, Some(5.5));
-                assert_eq!(scan.baseline.as_deref(), Some("baseline.json"));
-                assert!(scan.fail_on_regression);
-            }
-            Commands::Bundle(_) => panic!("expected scan command"),
-        }
-    }
-
-    #[test]
-    fn test_parse_bundle_arguments() {
-        let args = Cli::parse_from([
-            "sentinel",
-            "bundle",
-            "--contract",
-            "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-            "--contract",
-            "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-            "--key",
-            "ADMIN",
-            "--key",
-            "COUNTER",
-            "--source-account",
-            "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
-            "--extend-by",
-            "100000",
-            "--base-fee",
-            "200",
-        ]);
-        match args.command {
-            Commands::Bundle(bundle) => {
-                assert_eq!(bundle.contracts.len(), 2);
-                assert_eq!(bundle.keys, vec!["ADMIN", "COUNTER"]);
-                assert_eq!(bundle.extend_by, 100_000);
-                assert_eq!(bundle.base_fee, 200);
-                assert_eq!(bundle.network, "testnet");
-            }
-            Commands::Scan(_) => panic!("expected bundle command"),
-        }
-    }
 }
