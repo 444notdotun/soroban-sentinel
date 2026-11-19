@@ -1,9 +1,11 @@
 //! CLI command execution modules.
 
+pub mod audit_keys;
 pub mod bundle;
 pub mod check;
 pub mod scan;
 
+pub use audit_keys::run_audit_keys;
 pub use bundle::run_bundle;
 pub use check::run_check;
 

@@ -7,7 +7,7 @@ pub mod commands;
 pub mod config;
 pub mod formatters;
 
-pub use args::{BundleArgs, Cli, Commands, ScanArgs};
+pub use args::{AuditKeysArgs, BundleArgs, Cli, Commands, ScanArgs};
 pub use commands::{
     resolve_rpc_url, run_bundle, run_scan, EXIT_CRITICAL_OR_ARCHIVED, EXIT_INVALID_ARGS, EXIT_OK,
     EXIT_RPC_FAILURE, EXIT_WARN,
