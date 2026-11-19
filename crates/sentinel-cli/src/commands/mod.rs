@@ -1,8 +1,10 @@
 //! CLI command execution modules.
 
+pub mod bundle;
 pub mod check;
 pub mod scan;
 
+pub use bundle::run_bundle;
 pub use check::run_check;
 
 pub use scan::{

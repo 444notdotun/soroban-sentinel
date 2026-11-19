@@ -18,6 +18,10 @@ pub struct Cli {
 pub enum Commands {
     /// Scan a contract and inspect storage entry TTL status and expiry risk
     Scan(ScanArgs),
+
+    /// Bundle contract and persistent-key TTL extensions into simulated transactions
+    Bundle(BundleArgs),
+
     /// Scan contracts once from a TOML manifest
     Check(CheckArgs),
 }
@@ -80,6 +84,46 @@ pub struct ScanArgs {
     /// Return exit code 2 if any entry regressed in risk status or was removed compared to baseline
     #[arg(long = "fail-on-regression")]
     pub fail_on_regression: bool,
+}
+
+/// Command-line arguments for the `sentinel bundle` command.
+#[derive(Args, Debug, Clone)]
+pub struct BundleArgs {
+    /// Contract addresses to include (can be specified multiple times)
+    #[arg(long = "contract", value_name = "CONTRACT_ID")]
+    pub contracts: Vec<String>,
+
+    /// Persistent storage key symbol applied to each contract
+    #[arg(long = "key", value_name = "SYMBOL")]
+    pub keys: Vec<String>,
+
+    /// Persistent storage key encoded as base64 ScVal XDR
+    #[arg(long = "key-xdr", value_name = "BASE64_XDR")]
+    pub key_xdr: Vec<String>,
+
+    /// JSON bundle manifest path
+    #[arg(long, value_name = "PATH")]
+    pub manifest: Option<std::path::PathBuf>,
+
+    /// Source Stellar account that will sign the transaction
+    #[arg(long, value_name = "G...")]
+    pub source_account: String,
+
+    /// Ledger TTL extension length
+    #[arg(long, value_name = "LEDGERS")]
+    pub extend_by: u32,
+
+    /// Base transaction fee in stroops
+    #[arg(long, default_value_t = 100, value_name = "STROOPS")]
+    pub base_fee: u32,
+
+    /// Target Stellar network
+    #[arg(long, default_value = "testnet", value_name = "NETWORK")]
+    pub network: String,
+
+    /// Custom Soroban RPC endpoint URL
+    #[arg(long, value_name = "URL", env = "SOROBAN_RPC_URL")]
+    pub rpc_url: Option<String>,
 }
 
 /// Command-line arguments for a one-shot manifest check.
