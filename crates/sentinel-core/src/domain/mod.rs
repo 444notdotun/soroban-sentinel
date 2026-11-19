@@ -1,6 +1,7 @@
 //! Core pure domain models and calculations.
 
 pub mod compare;
+pub mod debt;
 pub mod entry;
 pub mod risk;
 pub mod ttl;
@@ -9,6 +10,7 @@ pub use compare::{
     compare_reports, BaselineDiff, BaselineDiffSummary, BaselineEntrySnapshot, BaselineSnapshot,
     ChangeCategory, EntryDiff, MAX_BASELINE_FILE_BYTES,
 };
+pub use debt::{RentDebt, RentDebtCalculator};
 pub use entry::{Durability, EntryType, StorageEntry};
 pub use risk::{
     evaluate_risk, RiskLevel, ThresholdConfig, DEFAULT_CRITICAL_LEDGERS, DEFAULT_WARNING_LEDGERS,
