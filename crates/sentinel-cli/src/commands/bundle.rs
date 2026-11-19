@@ -388,7 +388,7 @@ fn resolve_contracts(args: &BundleArgs) -> Result<Vec<ContractInput>, BundleComm
     if contracts.is_empty() {
         return Err(BundleCommandError::Invalid(
             "provide at least one --contract or a manifest with contracts".to_string(),
-        )));
+        ));
     }
     for contract in &mut contracts {
         for key in &args.keys {
