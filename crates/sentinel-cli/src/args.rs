@@ -18,6 +18,8 @@ pub struct Cli {
 pub enum Commands {
     /// Scan a contract and inspect storage entry TTL status and expiry risk
     Scan(ScanArgs),
+    /// Bundle contract and persistent-key TTL extensions into simulated transactions
+    Bundle(BundleArgs),
 }
 
 /// Command-line arguments for the `sentinel scan` command.
@@ -80,6 +82,50 @@ pub struct ScanArgs {
     pub fail_on_regression: bool,
 }
 
+/// Command-line arguments for the `sentinel bundle` command.
+#[derive(Args, Debug, Clone)]
+pub struct BundleArgs {
+    /// Contract address to include (repeatable; --key values apply to each)
+    #[arg(
+        long = "contract",
+        value_name = "CONTRACT_ID",
+        required_unless_present = "manifest"
+    )]
+    pub contracts: Vec<String>,
+
+    /// JSON manifest containing contracts and their optional persistent symbol keys
+    #[arg(long, value_name = "PATH")]
+    pub manifest: Option<String>,
+
+    /// Persistent storage symbol key to include for every selected contract (repeatable)
+    #[arg(long = "key", value_name = "SYMBOL")]
+    pub keys: Vec<String>,
+
+    /// Persistent storage key encoded as base64 ScVal XDR (repeatable)
+    #[arg(long = "key-xdr", value_name = "BASE64_XDR")]
+    pub key_xdr: Vec<String>,
+
+    /// Stellar account that will be the unsigned transaction source
+    #[arg(long = "source-account", value_name = "G...")]
+    pub source_account: String,
+
+    /// Extend entries to this many ledgers beyond the current ledger (required)
+    #[arg(long = "extend-by", value_name = "LEDGERS")]
+    pub extend_by: u32,
+
+    /// Target Stellar network: "testnet", "mainnet", "futurenet", or "local"
+    #[arg(long, default_value = "testnet", value_name = "NETWORK")]
+    pub network: String,
+
+    /// Custom Soroban RPC endpoint URL (overrides the network preset)
+    #[arg(long, value_name = "URL", env = "SOROBAN_RPC_URL")]
+    pub rpc_url: Option<String>,
+
+    /// Inclusion fee per operation in stroops used when constructing each envelope
+    #[arg(long = "base-fee", default_value_t = 100, value_name = "STROOPS")]
+    pub base_fee: u32,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -110,6 +156,7 @@ mod tests {
                 assert!(scan.baseline.is_none());
                 assert!(!scan.fail_on_regression);
             }
+            Commands::Bundle(_) => panic!("expected scan command"),
         }
     }
 
@@ -170,6 +217,39 @@ mod tests {
                 assert_eq!(scan.baseline.as_deref(), Some("baseline.json"));
                 assert!(scan.fail_on_regression);
             }
+            Commands::Bundle(_) => panic!("expected scan command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_bundle_arguments() {
+        let args = Cli::parse_from([
+            "sentinel",
+            "bundle",
+            "--contract",
+            "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+            "--contract",
+            "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+            "--key",
+            "ADMIN",
+            "--key",
+            "COUNTER",
+            "--source-account",
+            "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+            "--extend-by",
+            "100000",
+            "--base-fee",
+            "200",
+        ]);
+        match args.command {
+            Commands::Bundle(bundle) => {
+                assert_eq!(bundle.contracts.len(), 2);
+                assert_eq!(bundle.keys, vec!["ADMIN", "COUNTER"]);
+                assert_eq!(bundle.extend_by, 100_000);
+                assert_eq!(bundle.base_fee, 200);
+                assert_eq!(bundle.network, "testnet");
+            }
+            Commands::Scan(_) => panic!("expected bundle command"),
         }
     }
 }

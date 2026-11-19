@@ -1254,6 +1254,7 @@ dependencies = [
  "clap",
  "comfy-table",
  "predicates",
+ "reqwest",
  "sentinel-core",
  "serde",
  "serde_json",

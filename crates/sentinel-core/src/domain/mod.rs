@@ -1,11 +1,15 @@
 //! Core pure domain models and calculations.
 
+pub mod bundle;
 pub mod compare;
 pub mod entry;
 pub mod risk;
 pub mod scenario;
 pub mod ttl;
 
+pub use bundle::{
+    plan_bundle_footprints, BundleError, BundleFootprint, MAX_BUNDLE_FOOTPRINT_ENTRIES,
+};
 pub use compare::{
     compare_reports, BaselineDiff, BaselineDiffSummary, BaselineEntrySnapshot, BaselineSnapshot,
     ChangeCategory, EntryDiff, MAX_BASELINE_FILE_BYTES,
