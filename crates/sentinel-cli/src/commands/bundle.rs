@@ -346,22 +346,32 @@ fn resolve_contracts(args: &BundleArgs) -> Result<Vec<ContractInput>, BundleComm
     let mut contracts = Vec::<ContractInput>::new();
     if let Some(path) = &args.manifest {
         let file = fs::File::open(path).map_err(|error| {
-            BundleCommandError::Invalid(format!("failed to read manifest '{}': {error}", path))
+            BundleCommandError::Invalid(format!(
+                "failed to read manifest '{}': {error}",
+                path.display()
+            ))
         })?;
         let mut contents = Vec::new();
         file.take(MANIFEST_MAX_BYTES + 1)
             .read_to_end(&mut contents)
             .map_err(|error| {
-                BundleCommandError::Invalid(format!("failed to read manifest '{}': {error}", path))
+                BundleCommandError::Invalid(format!(
+                    "failed to read manifest '{}': {error}",
+                    path.display()
+                ))
             })?;
         if contents.len() as u64 > MANIFEST_MAX_BYTES {
             return Err(BundleCommandError::Invalid(format!(
                 "manifest '{}' exceeds the {} byte limit",
-                path, MANIFEST_MAX_BYTES
+                path.display(),
+                MANIFEST_MAX_BYTES
             )));
         }
         let manifest: BundleManifest = serde_json::from_slice(&contents).map_err(|error| {
-            BundleCommandError::Invalid(format!("invalid JSON bundle manifest '{}': {error}", path))
+            BundleCommandError::Invalid(format!(
+                "invalid JSON bundle manifest '{}': {error}",
+                path.display()
+            ))
         })?;
         for entry in manifest.contracts {
             merge_contract(
@@ -378,7 +388,7 @@ fn resolve_contracts(args: &BundleArgs) -> Result<Vec<ContractInput>, BundleComm
     if contracts.is_empty() {
         return Err(BundleCommandError::Invalid(
             "provide at least one --contract or a manifest with contracts".to_string(),
-        ));
+        )));
     }
     for contract in &mut contracts {
         for key in &args.keys {
