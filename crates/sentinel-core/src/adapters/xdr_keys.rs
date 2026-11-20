@@ -155,6 +155,8 @@ pub fn derive_temporary_symbol_key(contract_id: &[u8; 32], symbol: &str) -> Sent
         SentinelError::InvalidXdrKey(format!("Invalid symbol '{}': {}", symbol, e))
     })?);
     derive_temporary_key_from_scval(contract_id, ScVal::Symbol(sc_symbol))
+}
+
 /// Validates and parses a Stellar strkey address (`G...` account or `C...` contract) into an `ScAddress`.
 ///
 /// Returns typed `SentinelError::InvalidContractAddress` diagnostics on malformed or unsupported address types.
