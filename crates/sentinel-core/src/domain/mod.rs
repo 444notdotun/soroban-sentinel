@@ -1,6 +1,7 @@
 //! Core pure domain models and calculations.
 
 pub mod bundle;
+pub mod burn_rate;
 pub mod cold_storage;
 pub mod compare;
 pub mod entry;
@@ -11,6 +12,11 @@ pub mod ttl;
 
 pub use bundle::{
     plan_bundle_footprints, BundleError, BundleFootprint, MAX_BUNDLE_FOOTPRINT_ENTRIES,
+};
+pub use burn_rate::{
+    calculate_burn_rate, project_exhaustion, validate_sample_window, BurnRate, BurnRateError,
+    BurnRateSource, LedgerCloseSample, ProjectedExhaustion, DEFAULT_SAMPLE_WINDOW_LEDGERS,
+    MAX_SAMPLE_WINDOW_LEDGERS, MIN_SAMPLE_WINDOW_LEDGERS,
 };
 pub use compare::{
     compare_reports, BaselineDiff, BaselineDiffSummary, BaselineEntrySnapshot, BaselineSnapshot,
