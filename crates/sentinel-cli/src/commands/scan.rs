@@ -177,6 +177,10 @@ pub async fn run_scan(args: ScanArgs) -> i32 {
         }
         if args.tui && args.baseline.is_some() {
             eprintln!("Error: --tui cannot be combined with --baseline");
+            return EXIT_INVALID_ARGS;
+        }
+    }
+
     let format = args.format.to_lowercase();
 
     if format == "csv" && args.baseline.is_some() {
