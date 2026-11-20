@@ -1,18 +1,24 @@
 //! Core pure domain models and calculations.
 
 pub mod budget;
+pub mod bundle;
 pub mod cold_storage;
 pub mod compare;
 pub mod entry;
+pub mod footprint;
 pub mod risk;
 pub mod scenario;
 pub mod ttl;
 
+pub use bundle::{
+    plan_bundle_footprints, BundleError, BundleFootprint, MAX_BUNDLE_FOOTPRINT_ENTRIES,
+};
 pub use compare::{
     compare_reports, BaselineDiff, BaselineDiffSummary, BaselineEntrySnapshot, BaselineSnapshot,
     ChangeCategory, EntryDiff, MAX_BASELINE_FILE_BYTES,
 };
 pub use entry::{Durability, EntryType, StorageEntry};
+pub use footprint::{AtRiskFootprint, FootprintAccess, FootprintValidation, FootprintValidator};
 pub use risk::{
     evaluate_risk, RiskLevel, ThresholdConfig, DEFAULT_CRITICAL_LEDGERS, DEFAULT_WARNING_LEDGERS,
 };
