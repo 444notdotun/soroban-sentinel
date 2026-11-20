@@ -143,3 +143,42 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 # 6. Verify formatting
 cargo fmt --all -- --check
 ```
+
+---
+
+## 5. Fuzzing Untrusted XDR and RPC Data
+
+The `fuzz/` directory is a separate cargo-fuzz workspace, so the main workspace
+never needs nightly Rust. It exercises the base64 XDR decoders, scan byte-size
+computation, and the private `getLedgerEntries` / `getLatestLedger` JSON-RPC DTOs
+through thin `#[doc(hidden)]` entry points enabled only by sentinel-core's
+non-default `fuzzing` feature.
+
+```bash
+# One-time setup
+rustup toolchain install nightly
+cargo install cargo-fuzz --locked
+
+# Regenerate the committed seed corpora from valid test fixtures
+cargo run --manifest-path fuzz/Cargo.toml --example generate_seeds
+
+# Build every target, then run one for 60 seconds
+cargo +nightly fuzz build
+cargo +nightly fuzz run derive_persistent_xdr_key -- -max_total_time=60
+
+# Run a target with the same 10 MiB input cap and a bounded RSS limit
+cargo +nightly fuzz run get_ledger_entries_response -- \
+  -max_total_time=60 -max_len=10485760 -rss_limit_mb=2048
+```
+
+Seeds live under `fuzz/corpus/<target>/` and are committed. Crashes or leaks are
+written to `fuzz/artifacts/<target>/`. To reproduce and minimize a crash:
+
+```bash
+cargo +nightly fuzz run <target> -- fuzz/artifacts/<target>/<crash-file>
+cargo +nightly fuzz tmin <target> fuzz/artifacts/<target>/<crash-file>
+```
+
+CI runs each target for 60 seconds on pull requests touching
+`crates/sentinel-core/**` via `.github/workflows/fuzz.yml` and uploads any crash
+artifacts.

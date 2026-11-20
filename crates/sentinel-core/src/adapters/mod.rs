@@ -20,3 +20,8 @@ pub use xdr_keys::{
     derive_persistent_symbol_key, derive_persistent_xdr_key, extract_wasm_hash_from_instance_entry,
     parse_contract_id, safe_xdr_limits, XDR_MAX_BYTE_LENGTH, XDR_MAX_RECURSION_DEPTH,
 };
+
+#[cfg(feature = "fuzzing")]
+pub use soroban_rpc::{
+    fuzz_parse_get_latest_ledger_response, fuzz_parse_get_ledger_entries_response,
+};

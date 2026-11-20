@@ -259,6 +259,16 @@ fn compute_byte_size(entry_xdr_base64: &str) -> usize {
     }
 }
 
+/// Fuzzing entry point for the scan byte-size computation.
+///
+/// Keeps the production helper private while allowing the fuzz target in `fuzz/`
+/// to exercise it with arbitrary base64 XDR text.
+#[cfg(feature = "fuzzing")]
+#[doc(hidden)]
+pub fn fuzz_compute_byte_size(entry_xdr_base64: &str) -> usize {
+    compute_byte_size(entry_xdr_base64)
+}
+
 /// Application orchestrator for scanning Soroban smart contract storage TTL and expiration risk.
 pub struct ScanContractUseCase<R: LedgerReader> {
     reader: R,
@@ -794,6 +804,14 @@ mod tests {
             .entries
             .iter()
             .any(|e| e.status == RiskLevel::Critical));
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn test_fuzz_compute_byte_size_handles_malformed_input() {
+        assert_eq!(fuzz_compute_byte_size(""), 0);
+        assert_eq!(fuzz_compute_byte_size("!!!"), 2);
+        assert!(fuzz_compute_byte_size("not-valid-xdr-base64!!") > 0);
     }
 
     #[test]
