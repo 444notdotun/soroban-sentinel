@@ -1,6 +1,8 @@
 //! Execution logic for the `sentinel scan` CLI command.
 
 use std::fs;
+#[cfg(feature = "tui")]
+use std::io::IsTerminal;
 use std::path::Path;
 use std::time::Duration;
 
@@ -122,6 +124,26 @@ pub fn load_and_validate_baseline(
 
 /// Executes the contract scan command and returns the appropriate UNIX exit code.
 pub async fn run_scan(args: ScanArgs) -> i32 {
+    #[cfg(not(feature = "tui"))]
+    if args.tui {
+        eprintln!(
+            "Error: --tui requires the CLI to be built with the `tui` feature (rebuild with `cargo install --path crates/sentinel-cli --features tui` or `cargo build -p sentinel-cli --features tui`)"
+        );
+        return EXIT_INVALID_ARGS;
+    }
+
+    #[cfg(feature = "tui")]
+    {
+        if args.tui && !std::io::stdout().is_terminal() {
+            eprintln!("Error: --tui requires an interactive TTY, but stdout is not a terminal");
+            return EXIT_INVALID_ARGS;
+        }
+        if args.tui && args.baseline.is_some() {
+            eprintln!("Error: --tui cannot be combined with --baseline");
+            return EXIT_INVALID_ARGS;
+        }
+    }
+
     // 1. Validate argument bounds before making any RPC calls
     if let Some(timeout) = args.rpc_timeout {
         if !(1..=120).contains(&timeout) {
@@ -218,6 +240,11 @@ pub async fn run_scan(args: ScanArgs) -> i32 {
             };
         }
     };
+
+    #[cfg(feature = "tui")]
+    if args.tui {
+        return crate::commands::tui::run_tui(report, threshold_config, &args.network);
+    }
 
     let baseline_diff = baseline_snapshot
         .as_ref()

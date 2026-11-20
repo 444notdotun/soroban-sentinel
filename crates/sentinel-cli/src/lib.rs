@@ -6,6 +6,8 @@ pub mod args;
 pub mod commands;
 pub mod config;
 pub mod formatters;
+#[cfg(feature = "tui")]
+pub mod tui;
 
 pub use args::{BundleArgs, Cli, Commands, ScanArgs};
 pub use commands::{
