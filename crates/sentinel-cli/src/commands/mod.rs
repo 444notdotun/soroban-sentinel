@@ -1,6 +1,7 @@
 //! CLI command execution modules.
 
 pub mod audit_keys;
+pub mod bump;
 pub mod bundle;
 pub mod check;
 pub mod cost_matrix;
@@ -8,6 +9,7 @@ pub mod diff;
 pub mod forecast;
 pub mod init;
 pub mod keys;
+pub mod network;
 pub mod restore;
 pub mod scan;
 pub mod service;
@@ -15,6 +17,7 @@ pub mod service;
 pub mod tui;
 
 pub use audit_keys::run_audit_keys;
+pub use bump::run_bump;
 pub use bundle::run_bundle;
 pub use check::run_check;
 pub use cost_matrix::run_cost_matrix;
@@ -22,6 +25,7 @@ pub use diff::run_diff_reports;
 pub use forecast::run_forecast;
 pub use init::run_init;
 pub use keys::{run_key_decode, run_key_encode};
+pub use network::run_network;
 pub use restore::run_restore;
 
 pub use scan::{
