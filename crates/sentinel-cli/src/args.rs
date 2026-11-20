@@ -10,6 +10,12 @@ use clap::{Args, Parser, Subcommand};
     long_about = "Soroban Sentinel provides operator-grade storage TTL monitoring, expiry-risk classification, and automated maintenance detection for smart contracts on the Stellar network."
 )]
 pub struct Cli {
+    /// OTLP collector endpoint for traces and metrics (e.g. "http://localhost:4317").
+    ///
+    /// Falls back to the OTEL_EXPORTER_OTLP_ENDPOINT environment variable.
+    #[arg(long = "otlp-endpoint", global = true, value_name = "URL")]
+    pub otlp_endpoint: Option<String>,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -93,6 +99,10 @@ pub struct ScanArgs {
     /// Return exit code 2 if any entry regressed in risk status or was removed compared to baseline
     #[arg(long = "fail-on-regression")]
     pub fail_on_regression: bool,
+
+    /// Launch the interactive TUI dashboard (requires the `tui` Cargo feature and a TTY)
+    #[arg(long)]
+    pub tui: bool,
 }
 
 /// Command-line arguments for the cost-matrix command.
@@ -241,6 +251,7 @@ mod tests {
             "scan",
             "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
         ]);
+        assert!(args.otlp_endpoint.is_none());
         match args.command {
             Commands::Scan(scan) => {
                 assert_eq!(
@@ -260,6 +271,7 @@ mod tests {
                 assert!(scan.ledger_seconds.is_none());
                 assert!(scan.baseline.is_none());
                 assert!(!scan.fail_on_regression);
+                assert!(!scan.tui);
             }
             _ => panic!("expected scan command"),
         }
@@ -300,8 +312,12 @@ mod tests {
             "--baseline",
             "baseline.json",
             "--fail-on-regression",
+            "--tui",
+            "--otlp-endpoint",
+            "http://localhost:4317",
         ]);
 
+        assert_eq!(args.otlp_endpoint.as_deref(), Some("http://localhost:4317"));
         match args.command {
             Commands::Scan(scan) => {
                 assert_eq!(
@@ -324,6 +340,7 @@ mod tests {
                 assert_eq!(scan.ledger_seconds, Some(5.5));
                 assert_eq!(scan.baseline.as_deref(), Some("baseline.json"));
                 assert!(scan.fail_on_regression);
+                assert!(scan.tui);
             }
             _ => panic!("expected scan command"),
         }

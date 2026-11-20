@@ -91,6 +91,7 @@ The following table distinguishes between MVP release features and post-MVP road
 | **CLI (MVP)** | Machine-Readable JSON Output (`--format json`) | N/A | **Completed (v0.1.0)** | [MVP Scope](docs/MVP_SCOPE.md#1-mvp-feature-set-v010) |
 | **CLI** | Flat CSV Export (`--format csv`, `--output`) | N/A | **Available** | Issue #55 |
 | **CLI (MVP)** | Explicit Persistent Key Verification (`--key`, `--key-xdr`) | Protocol 20+ | **Completed (v0.1.0)** | [MVP Scope](docs/MVP_SCOPE.md#1-mvp-feature-set-v010) |
+| **CLI** | Interactive TUI Dashboard (`sentinel scan --tui`) | N/A | **Available (optional `tui` feature)** | Issue #42 |
 | **CLI** | Markdown Output (`--format markdown`) | N/A | **Planned (Sprint 3)** | [Roadmap](docs/IMPLEMENTATION_ROADMAP.md#phase-3) |
 | **CLI** | Rent Simulation (`sentinel forecast <ID>`) | Protocol 20+ | **Planned (Sprint 3)** | [Roadmap](docs/IMPLEMENTATION_ROADMAP.md#phase-3) |
 | **CLI** | Archived State Restoration (`sentinel restore <ID>`) | CAP-0046 | **Available** | Issue #40 |
@@ -244,6 +245,23 @@ sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
   --ledger-seconds 5.8
 ```
 
+### OpenTelemetry OTLP Export (`--otlp-endpoint`)
+Send distributed traces and metrics for scan execution, Soroban RPC calls, and
+XDR parsing to any OTLP-compatible collector:
+
+```bash
+# Configure per invocation
+sentinel --otlp-endpoint http://localhost:4317 scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+
+# Or use the standard OpenTelemetry environment variable
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+```
+
+The CLI exports `sentinel.contracts.scanned`, `sentinel.entries.expired`, and
+`sentinel.findings.critical` counters, flushes buffered telemetry before exit,
+and continues normally with a warning if the collector is unreachable.
+
 ### Bundling TTL Extensions
 Create unsigned `ExtendFootprintTTL` transaction envelopes for multiple contracts.
 Each transaction contains a deduplicated read-only footprint capped at 40 entries,
@@ -315,6 +333,28 @@ Contract: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC | Network: te
 +-----------------------+------------+------------+-------------------+----------------------+--------+
 Summary: 3 entries checked. 3 OK, 0 WARN, 0 CRITICAL/ARCHIVED.
 ```
+
+### Interactive TUI Dashboard
+For contracts with many storage keys, build with the optional `tui` feature and
+launch the dashboard:
+
+```bash
+cargo build --release -p sentinel-cli --features tui
+
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC --tui
+```
+
+The dashboard shows a scrollable table with entry key, durability, byte size,
+remaining ledgers, and health status, plus a color-coded TTL gauge for the
+selected key. Use `Up`/`Down` (or `PgUp`/`PgDn`) to navigate rows, `Left`/`Right`
+to change sort column, `s` to reverse the sort direction, `Tab` to switch between
+the table and detail panels, and `q` or `Esc` to exit. Window resize events are
+handled by reflowing the layout.
+
+The `tui` feature is disabled by default so the standard binary stays
+lightweight. Running `--tui` without the feature exits 10 with a rebuild hint;
+with the feature enabled it also exits 10 if stdout is not a TTY. Mouse input
+and web hosting are not supported.
 
 ### Emitting Machine-Readable JSON (CI/CD Pipelines)
 ```bash
