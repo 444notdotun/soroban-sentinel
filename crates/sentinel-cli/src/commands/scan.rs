@@ -296,6 +296,7 @@ pub async fn run_scan(args: ScanArgs) -> i32 {
     if args.tui {
         return crate::commands::tui::run_tui(report, threshold_config, &args.network);
     }
+    crate::telemetry::record_scan_metrics(&report);
 
     let baseline_diff = baseline_snapshot
         .as_ref()

@@ -10,6 +10,12 @@ use clap::{Args, Parser, Subcommand};
     long_about = "Soroban Sentinel provides operator-grade storage TTL monitoring, expiry-risk classification, and automated maintenance detection for smart contracts on the Stellar network."
 )]
 pub struct Cli {
+    /// OTLP collector endpoint for traces and metrics (e.g. "http://localhost:4317").
+    ///
+    /// Falls back to the OTEL_EXPORTER_OTLP_ENDPOINT environment variable.
+    #[arg(long = "otlp-endpoint", global = true, value_name = "URL")]
+    pub otlp_endpoint: Option<String>,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -202,6 +208,7 @@ mod tests {
             "scan",
             "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
         ]);
+        assert!(args.otlp_endpoint.is_none());
         match args.command {
             Commands::Scan(scan) => {
                 assert_eq!(
@@ -263,8 +270,11 @@ mod tests {
             "baseline.json",
             "--fail-on-regression",
             "--tui",
+            "--otlp-endpoint",
+            "http://localhost:4317",
         ]);
 
+        assert_eq!(args.otlp_endpoint.as_deref(), Some("http://localhost:4317"));
         match args.command {
             Commands::Scan(scan) => {
                 assert_eq!(

@@ -263,6 +263,7 @@ pub fn compute_overall_status(entries: &[StorageEntryReport]) -> RiskLevel {
 }
 
 /// Safely computes the binary byte size from base64 XDR string.
+#[tracing::instrument(skip(entry_xdr_base64), fields(xdr.base64_len = entry_xdr_base64.len()))]
 fn compute_byte_size(entry_xdr_base64: &str) -> usize {
     if let Ok(entry) =
         stellar_xdr::curr::LedgerEntry::from_xdr_base64(entry_xdr_base64, safe_xdr_limits())
@@ -290,6 +291,16 @@ fn compute_byte_size(entry_xdr_base64: &str) -> usize {
     } else {
         trimmed.len()
     }
+}
+
+/// Fuzzing entry point for the scan byte-size computation.
+///
+/// Keeps the production helper private while allowing the fuzz target in `fuzz/`
+/// to exercise it with arbitrary base64 XDR text.
+#[cfg(feature = "fuzzing")]
+#[doc(hidden)]
+pub fn fuzz_compute_byte_size(entry_xdr_base64: &str) -> usize {
+    compute_byte_size(entry_xdr_base64)
 }
 
 /// Application orchestrator for scanning Soroban smart contract storage TTL and expiration risk.
@@ -324,6 +335,15 @@ impl<R: LedgerReader> ScanContractUseCase<R> {
     }
 
     /// Executes the full contract scan workflow.
+    #[tracing::instrument(
+        skip(self, request),
+        fields(
+            contract_id = %request.contract_id_strkey,
+            network = request.network.as_deref().unwrap_or("testnet"),
+            entry.count = tracing::field::Empty,
+            overall.status = tracing::field::Empty
+        )
+    )]
     pub async fn execute(&self, request: ScanRequest) -> SentinelResult<TTLReport> {
         let contract_id_bytes = parse_contract_id(&request.contract_id_strkey)?;
         request.threshold_config.validate()?;
@@ -553,6 +573,9 @@ impl<R: LedgerReader> ScanContractUseCase<R> {
         }
 
         let overall_status = compute_overall_status(&reports);
+        let span = tracing::Span::current();
+        span.record("entry.count", reports.len() as u64);
+        span.record("overall.status", tracing::field::display(overall_status));
 
         Ok(TTLReport {
             contract_id: request.contract_id_strkey,
@@ -842,6 +865,14 @@ mod tests {
             .entries
             .iter()
             .any(|e| e.status == RiskLevel::Critical));
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn test_fuzz_compute_byte_size_handles_malformed_input() {
+        assert_eq!(fuzz_compute_byte_size(""), 0);
+        assert_eq!(fuzz_compute_byte_size("!!!"), 2);
+        assert!(fuzz_compute_byte_size("not-valid-xdr-base64!!") > 0);
     }
 
     #[test]
