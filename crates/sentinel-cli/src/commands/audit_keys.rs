@@ -180,7 +180,10 @@ pub async fn run_audit_keys(args: AuditKeysArgs) -> i32 {
     // Temporary keys are explicit because arbitrary temporary key enumeration is not supported by Soroban RPC.
     for sym in &args.temp_key {
         if let Ok(key) = derive_temporary_symbol_key(&contract_id, sym) {
-            let found = usecase.reader().get_ledger_entries(&[key.clone()]).await;
+            let found = usecase
+                .reader()
+                .get_ledger_entries(std::slice::from_ref(&key))
+                .await;
             if let Ok(raw) = found {
                 if let Some(raw_entry) = raw.first() {
                     let remaining =

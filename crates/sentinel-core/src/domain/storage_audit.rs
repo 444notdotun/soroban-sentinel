@@ -64,7 +64,7 @@ pub fn analyze_storage_entry(
                 recommendation: "This entry is smaller than 32 bytes; use temporary storage if it is recreated or does not need archival restoration.".to_string(),
             });
         }
-        if remaining_ledgers >= 0 && remaining_ledgers < 34_560 {
+        if (0..34_560).contains(&remaining_ledgers) {
             findings.push(AuditFinding {
                 kind: AuditFindingKind::RapidExpiry,
                 severity: "warning".to_string(),
