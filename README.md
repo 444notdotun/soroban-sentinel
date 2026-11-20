@@ -217,6 +217,23 @@ sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
   --ledger-seconds 5.8
 ```
 
+### OpenTelemetry OTLP Export (`--otlp-endpoint`)
+Send distributed traces and metrics for scan execution, Soroban RPC calls, and
+XDR parsing to any OTLP-compatible collector:
+
+```bash
+# Configure per invocation
+sentinel --otlp-endpoint http://localhost:4317 scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+
+# Or use the standard OpenTelemetry environment variable
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+```
+
+The CLI exports `sentinel.contracts.scanned`, `sentinel.entries.expired`, and
+`sentinel.findings.critical` counters, flushes buffered telemetry before exit,
+and continues normally with a warning if the collector is unreachable.
+
 ### Bundling TTL Extensions
 Create unsigned `ExtendFootprintTTL` transaction envelopes for multiple contracts.
 Each transaction contains a deduplicated read-only footprint capped at 40 entries,

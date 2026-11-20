@@ -219,6 +219,8 @@ pub async fn run_scan(args: ScanArgs) -> i32 {
         }
     };
 
+    crate::telemetry::record_scan_metrics(&report);
+
     let baseline_diff = baseline_snapshot
         .as_ref()
         .map(|b| compare_reports(&report, b));
