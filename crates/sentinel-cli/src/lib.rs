@@ -6,9 +6,9 @@ pub mod args;
 pub mod commands;
 pub mod config;
 pub mod formatters;
+pub mod telemetry;
 #[cfg(feature = "tui")]
 pub mod tui;
-pub mod telemetry;
 
 pub use args::{BundleArgs, Cli, Commands, ScanArgs};
 pub use commands::{
