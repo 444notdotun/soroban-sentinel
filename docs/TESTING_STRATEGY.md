@@ -88,6 +88,8 @@ Mock tests run against an in-process HTTP mock server using the `wiremock` crate
 | :--- | :--- | :--- |
 | `sentinel scan CA3D... --format text` | Formatted terminal table printed to `stdout` | `0` (if all entries OK) |
 | `sentinel scan CA3D... --format json` | Output parses as valid JSON against schema | `0` (if all entries OK) |
+| `sentinel scan CA3D... --format csv` | Output parses as CSV with the exact nine-column header and no ANSI codes | `0` (if all entries OK) |
+| `sentinel scan CA3D... --format csv --baseline baseline.json` | Rejected before RPC with a clear error | `10` (Bad Input) |
 | `sentinel scan INVALID_STRKEY` | Error message: `Invalid contract ID '...'` | `10` (Bad Input) |
 | `sentinel scan CA3D... --threshold 99999999` | All entries evaluated as `WARN` | `1` (Warning State) |
 | `sentinel scan <NON_EXISTENT_CONTRACT>` | Warning: `Contract instance not found` | `2` (Critical / Missing) |
