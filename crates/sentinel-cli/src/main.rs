@@ -5,6 +5,7 @@ use sentinel_cli::args::{Cli, Commands};
 use sentinel_cli::commands::{run_scan, EXIT_INVALID_ARGS};
 use std::env;
 use std::process::Command;
+use sentinel_cli::commands::{run_bundle, run_check, run_scan, EXIT_INVALID_ARGS};
 
 #[tokio::main]
 async fn main() {
@@ -49,7 +50,9 @@ async fn main() {
     };
 
     let exit_code = match cli.command {
+        Commands::Check(args) => run_check(args).await,
         Commands::Scan(args) => run_scan(args).await,
+        Commands::Bundle(args) => run_bundle(args).await,
     };
 
     std::process::exit(exit_code);
