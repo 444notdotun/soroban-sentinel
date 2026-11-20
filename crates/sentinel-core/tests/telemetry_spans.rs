@@ -58,7 +58,7 @@ async fn scan_emits_execution_and_xdr_parsing_spans() {
     let instance_key = derive_contract_instance_key(&contract_bytes).unwrap();
     let entry = RawLedgerEntry::new(
         &instance_key,
-        &instance_xdr(contract_bytes),
+        instance_xdr(contract_bytes),
         5_500_000,
         5_400_000,
     );
