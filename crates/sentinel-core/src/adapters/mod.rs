@@ -22,3 +22,8 @@ pub use xdr_keys::{
     extract_wasm_hash_from_instance_entry, parse_contract_id, parse_sc_address, safe_xdr_limits,
     summarize_scval, XDR_MAX_BYTE_LENGTH, XDR_MAX_RECURSION_DEPTH,
 };
+
+#[cfg(feature = "fuzzing")]
+pub use soroban_rpc::{
+    fuzz_parse_get_latest_ledger_response, fuzz_parse_get_ledger_entries_response,
+};
