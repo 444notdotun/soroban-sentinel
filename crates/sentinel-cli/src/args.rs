@@ -49,9 +49,13 @@ pub struct ScanArgs {
     #[arg(long, default_value = "testnet", value_name = "NETWORK")]
     pub network: String,
 
-    /// Output format for scan results: "text" (colorized ASCII table), "json" (machine-readable), or "sarif" (GitHub Code Scanning)
+    /// Output format for scan results: "text" (colorized ASCII table), "json" (machine-readable), "csv" (flat tabular export), or "sarif" (GitHub Code Scanning)
     #[arg(long, default_value = "text", value_name = "FORMAT")]
     pub format: String,
+
+    /// Write report output to a file instead of stdout (existing files are overwritten)
+    #[arg(long, value_name = "PATH")]
+    pub output: Option<String>,
 
     /// Persistent storage key symbol to inspect (can be specified multiple times)
     #[arg(long = "key", value_name = "SYMBOL")]
@@ -209,6 +213,7 @@ mod tests {
                 );
                 assert_eq!(scan.network, "testnet");
                 assert_eq!(scan.format, "text");
+                assert!(scan.output.is_none());
                 assert_eq!(scan.threshold, 120960);
                 assert!(scan.rpc_url.is_none());
                 assert!(scan.key.is_empty());
@@ -236,6 +241,8 @@ mod tests {
             "mainnet",
             "--format",
             "json",
+            "--output",
+            "report.csv",
             "--threshold",
             "50000",
             "--key",
@@ -274,6 +281,7 @@ mod tests {
                 );
                 assert_eq!(scan.network, "mainnet");
                 assert_eq!(scan.format, "json");
+                assert_eq!(scan.output.as_deref(), Some("report.csv"));
                 assert_eq!(scan.threshold, 50000);
                 assert_eq!(scan.key, vec!["COUNTER", "ADMIN"]);
                 assert_eq!(scan.key_xdr, vec!["AAAAFA=="]);
