@@ -26,9 +26,6 @@ fn main() {
     });
 
     // Set environment variable available via option_env! and std::env::var
-    let full_version = format!(
-        "0.1.0 (sha: {}; target: {})",
-        git_sha, target_triple
-    );
+    let full_version = format!("0.1.0 (sha: {}; target: {})", git_sha, target_triple);
     println!("cargo:rustc-env=FULL_VERSION={}", full_version);
 }

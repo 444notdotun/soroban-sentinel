@@ -2,10 +2,9 @@
 
 use clap::Parser;
 use sentinel_cli::args::{Cli, Commands};
-use sentinel_cli::commands::{run_scan, EXIT_INVALID_ARGS};
+use sentinel_cli::commands::{run_bundle, run_check, run_scan, EXIT_INVALID_ARGS};
 use std::env;
 use std::process::Command;
-use sentinel_cli::commands::{run_bundle, run_check, run_scan, EXIT_INVALID_ARGS};
 
 #[tokio::main]
 async fn main() {
@@ -33,7 +32,12 @@ async fn main() {
             })
             .unwrap_or_else(|| "unknown".to_string());
 
-        println!("sentinel {} (sha: {}; target: {})", env!("CARGO_PKG_VERSION"), git_sha, target_triple);
+        println!(
+            "sentinel {} (sha: {}; target: {})",
+            env!("CARGO_PKG_VERSION"),
+            git_sha,
+            target_triple
+        );
         std::process::exit(0);
     }
 
