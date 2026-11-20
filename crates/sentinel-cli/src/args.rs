@@ -99,6 +99,10 @@ pub struct ScanArgs {
     /// Return exit code 2 if any entry regressed in risk status or was removed compared to baseline
     #[arg(long = "fail-on-regression")]
     pub fail_on_regression: bool,
+
+    /// Launch the interactive TUI dashboard (requires the `tui` Cargo feature and a TTY)
+    #[arg(long)]
+    pub tui: bool,
 }
 
 /// Command-line arguments for the cost-matrix command.
@@ -275,6 +279,7 @@ mod tests {
                 assert!(scan.ledger_seconds.is_none());
                 assert!(scan.baseline.is_none());
                 assert!(!scan.fail_on_regression);
+                assert!(!scan.tui);
             }
             _ => panic!("expected scan command"),
         }
@@ -315,6 +320,7 @@ mod tests {
             "--baseline",
             "baseline.json",
             "--fail-on-regression",
+            "--tui",
             "--otlp-endpoint",
             "http://localhost:4317",
         ]);
@@ -342,6 +348,7 @@ mod tests {
                 assert_eq!(scan.ledger_seconds, Some(5.5));
                 assert_eq!(scan.baseline.as_deref(), Some("baseline.json"));
                 assert!(scan.fail_on_regression);
+                assert!(scan.tui);
             }
             _ => panic!("expected scan command"),
         }
