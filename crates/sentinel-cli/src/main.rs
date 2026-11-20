@@ -6,6 +6,8 @@ use sentinel_cli::commands::{
     run_bundle, run_check, run_cost_matrix, run_install_service, run_scan, EXIT_INVALID_ARGS,
 };
 use sentinel_cli::commands::{run_bundle, run_check, run_cost_matrix, run_scan, EXIT_INVALID_ARGS};
+    run_bundle, run_check, run_cost_matrix, run_restore, run_scan, EXIT_INVALID_ARGS,
+};
 use sentinel_cli::telemetry::{self, TelemetryConfig};
 
 #[tokio::main]
@@ -30,6 +32,7 @@ async fn main() {
         Commands::Scan(args) => run_scan(args).await,
         Commands::Bundle(args) => run_bundle(args).await,
         Commands::InstallService(args) => run_install_service(args),
+        Commands::Restore(args) => run_restore(args).await,
     };
 
     // Flush buffered spans/metrics before exiting, since `process::exit`
