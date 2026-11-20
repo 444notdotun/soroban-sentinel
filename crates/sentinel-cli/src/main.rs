@@ -20,6 +20,7 @@ async fn main() {
 
     let exit_code = match cli.command {
         Commands::Check(args) => run_check(args).await,
+        Commands::CostMatrix(args) => run_cost_matrix(args).await,
         Commands::Scan(args) => run_scan(args).await,
         Commands::Bundle(args) => run_bundle(args).await,
         Commands::Restore(args) => run_restore(args).await,
