@@ -10,6 +10,12 @@ use clap::{Args, Parser, Subcommand};
     long_about = "Soroban Sentinel provides operator-grade storage TTL monitoring, expiry-risk classification, and automated maintenance detection for smart contracts on the Stellar network."
 )]
 pub struct Cli {
+    /// OTLP collector endpoint for traces and metrics (e.g. "http://localhost:4317").
+    ///
+    /// Falls back to the OTEL_EXPORTER_OTLP_ENDPOINT environment variable.
+    #[arg(long = "otlp-endpoint", global = true, value_name = "URL")]
+    pub otlp_endpoint: Option<String>,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -46,9 +52,13 @@ pub struct ScanArgs {
     #[arg(long, default_value = "testnet", value_name = "NETWORK")]
     pub network: String,
 
-    /// Output format for scan results: "text" (colorized ASCII table), "json" (machine-readable), or "sarif" (GitHub Code Scanning)
+    /// Output format for scan results: "text" (colorized ASCII table), "json" (machine-readable), "csv" (flat tabular export), or "sarif" (GitHub Code Scanning)
     #[arg(long, default_value = "text", value_name = "FORMAT")]
     pub format: String,
+
+    /// Write report output to a file instead of stdout (existing files are overwritten)
+    #[arg(long, value_name = "PATH")]
+    pub output: Option<String>,
 
     /// Persistent storage key symbol to inspect (can be specified multiple times)
     #[arg(long = "key", value_name = "SYMBOL")]
@@ -89,6 +99,10 @@ pub struct ScanArgs {
     /// Return exit code 2 if any entry regressed in risk status or was removed compared to baseline
     #[arg(long = "fail-on-regression")]
     pub fail_on_regression: bool,
+
+    /// Launch the interactive TUI dashboard (requires the `tui` Cargo feature and a TTY)
+    #[arg(long)]
+    pub tui: bool,
 }
 
 /// Command-line arguments for the cost-matrix command.
@@ -221,6 +235,7 @@ mod tests {
             "scan",
             "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
         ]);
+        assert!(args.otlp_endpoint.is_none());
         match args.command {
             Commands::Scan(scan) => {
                 assert_eq!(
@@ -229,6 +244,7 @@ mod tests {
                 );
                 assert_eq!(scan.network, "testnet");
                 assert_eq!(scan.format, "text");
+                assert!(scan.output.is_none());
                 assert_eq!(scan.threshold, 120960);
                 assert!(scan.rpc_url.is_none());
                 assert!(scan.key.is_empty());
@@ -239,6 +255,7 @@ mod tests {
                 assert!(scan.ledger_seconds.is_none());
                 assert!(scan.baseline.is_none());
                 assert!(!scan.fail_on_regression);
+                assert!(!scan.tui);
             }
             _ => panic!("expected scan command"),
         }
@@ -256,6 +273,8 @@ mod tests {
             "mainnet",
             "--format",
             "json",
+            "--output",
+            "report.csv",
             "--threshold",
             "50000",
             "--key",
@@ -277,8 +296,12 @@ mod tests {
             "--baseline",
             "baseline.json",
             "--fail-on-regression",
+            "--tui",
+            "--otlp-endpoint",
+            "http://localhost:4317",
         ]);
 
+        assert_eq!(args.otlp_endpoint.as_deref(), Some("http://localhost:4317"));
         match args.command {
             Commands::Scan(scan) => {
                 assert_eq!(
@@ -291,6 +314,7 @@ mod tests {
                 );
                 assert_eq!(scan.network, "mainnet");
                 assert_eq!(scan.format, "json");
+                assert_eq!(scan.output.as_deref(), Some("report.csv"));
                 assert_eq!(scan.threshold, 50000);
                 assert_eq!(scan.key, vec!["COUNTER", "ADMIN"]);
                 assert_eq!(scan.key_xdr, vec!["AAAAFA=="]);
@@ -300,6 +324,7 @@ mod tests {
                 assert_eq!(scan.ledger_seconds, Some(5.5));
                 assert_eq!(scan.baseline.as_deref(), Some("baseline.json"));
                 assert!(scan.fail_on_regression);
+                assert!(scan.tui);
             }
             _ => panic!("expected scan command"),
         }
