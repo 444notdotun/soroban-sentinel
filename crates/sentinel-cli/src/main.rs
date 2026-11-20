@@ -2,8 +2,9 @@
 
 use clap::Parser;
 use sentinel_cli::args::{Cli, Commands};
-use sentinel_cli::commands::{run_bundle, run_check, run_install_service, run_scan, EXIT_INVALID_ARGS};
-use sentinel_cli::commands::{run_bundle, run_check, run_cost_matrix, run_scan, EXIT_INVALID_ARGS};
+use sentinel_cli::commands::{
+    run_bundle, run_check, run_cost_matrix, run_install_service, run_scan, EXIT_INVALID_ARGS,
+};
 
 #[tokio::main]
 async fn main() {

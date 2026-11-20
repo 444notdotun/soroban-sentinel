@@ -15,9 +15,7 @@ pub fn run_install_service(args: InstallServiceArgs) -> i32 {
 
     let service_type = if args.systemd {
         "systemd"
-    } else if args.launchd {
-        "launchd"
-    } else if env::consts::OS == "macos" {
+    } else if args.launchd || env::consts::OS == "macos" {
         "launchd"
     } else if env::consts::OS == "linux" {
         "systemd"
@@ -54,11 +52,13 @@ pub fn run_install_service(args: InstallServiceArgs) -> i32 {
             env::var_os("PATH").and_then(|paths| {
                 env::split_paths(&paths).find_map(|dir| {
                     let candidate = dir.join("sentinel");
-                    candidate.is_file().then(|| candidate.canonicalize().ok()).flatten()
+                    candidate
+                        .is_file()
+                        .then(|| candidate.canonicalize().ok())
+                        .flatten()
                 })
             })
-        })
-    {
+        }) {
         Some(path) => path,
         None => {
             eprintln!("Error: current Sentinel binary path could not be resolved");
@@ -98,7 +98,10 @@ pub fn run_install_service(args: InstallServiceArgs) -> i32 {
 fn canonical_regular_file(path: &Path) -> Result<PathBuf, String> {
     let metadata = fs::metadata(path).map_err(|error| format!("{}: {error}", path.display()))?;
     if !metadata.is_file() {
-        return Err(format!("manifest is not a regular file: {}", path.display()));
+        return Err(format!(
+            "manifest is not a regular file: {}",
+            path.display()
+        ));
     }
     path.canonicalize()
         .map_err(|error| format!("could not resolve manifest path: {error}"))
@@ -120,11 +123,17 @@ fn render_launchd(binary: &Path, manifest: &Path) -> String {
 }
 
 fn escape_systemd(path: &Path) -> String {
-    path.to_string_lossy().replace('%', "%%").replace(' ', "\\x20")
+    path.to_string_lossy()
+        .replace('%', "%%")
+        .replace(' ', "\\x20")
 }
 
 fn xml_escape(value: &str) -> String {
-    value.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 fn validate_generated(service_type: &str, rendered: &str) -> Result<(), String> {
@@ -132,13 +141,26 @@ fn validate_generated(service_type: &str, rendered: &str) -> Result<(), String> 
         return Err("empty output".to_owned());
     }
     if service_type == "systemd" {
-        for required in ["[Unit]", "[Service]", "[Install]", "Restart=on-failure", "NoNewPrivileges=true", "ProtectSystem=full", "ExecStart="] {
+        for required in [
+            "[Unit]",
+            "[Service]",
+            "[Install]",
+            "Restart=on-failure",
+            "NoNewPrivileges=true",
+            "ProtectSystem=full",
+            "ExecStart=",
+        ] {
             if !rendered.contains(required) {
                 return Err(format!("missing {required}"));
             }
         }
     } else {
-        for required in ["<plist", "<key>KeepAlive</key>", "<key>StandardOutPath</key>", "<key>EnvironmentVariables</key>"] {
+        for required in [
+            "<plist",
+            "<key>KeepAlive</key>",
+            "<key>StandardOutPath</key>",
+            "<key>EnvironmentVariables</key>",
+        ] {
             if !rendered.contains(required) {
                 return Err(format!("missing {required}"));
             }
@@ -150,17 +172,29 @@ fn validate_generated(service_type: &str, rendered: &str) -> Result<(), String> 
     Ok(())
 }
 
-fn write_service(dir: &Path, filename: &str, service_type: &str, rendered: &str) -> Result<(), String> {
-    fs::create_dir_all(dir).map_err(|error| format!("could not create output directory: {error}"))?;
+fn write_service(
+    dir: &Path,
+    filename: &str,
+    service_type: &str,
+    rendered: &str,
+) -> Result<(), String> {
+    fs::create_dir_all(dir)
+        .map_err(|error| format!("could not create output directory: {error}"))?;
     let target = dir.join(filename);
-    fs::write(&target, rendered).map_err(|error| format!("could not write {}: {error}", target.display()))?;
+    fs::write(&target, rendered)
+        .map_err(|error| format!("could not write {}: {error}", target.display()))?;
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mode = if service_type == "systemd" { 0o644 } else { 0o600 };
-        fs::set_permissions(&target, fs::Permissions::from_mode(mode))
-            .map_err(|error| format!("could not set permissions on {}: {error}", target.display()))?;
+        let mode = if service_type == "systemd" {
+            0o644
+        } else {
+            0o600
+        };
+        fs::set_permissions(&target, fs::Permissions::from_mode(mode)).map_err(|error| {
+            format!("could not set permissions on {}: {error}", target.display())
+        })?;
     }
     Ok(())
 }

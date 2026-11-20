@@ -52,7 +52,10 @@ fn systemd_file_contains_hardening_and_user() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        assert_eq!(fs::metadata(&target).unwrap().permissions().mode() & 0o777, 0o644);
+        assert_eq!(
+            fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o644
+        );
     }
 
     fs::remove_dir_all(output_dir).unwrap();
@@ -86,7 +89,10 @@ fn launchd_file_contains_required_keys() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        assert_eq!(fs::metadata(&target).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
     }
 
     fs::remove_dir_all(output_dir).unwrap();
@@ -97,7 +103,13 @@ fn launchd_file_contains_required_keys() {
 fn mutually_exclusive_types_and_missing_manifest_are_rejected() {
     let mut conflict = Command::cargo_bin("sentinel").unwrap();
     conflict
-        .args(["install-service", "--systemd", "--launchd", "--manifest", "sentinel.toml"])
+        .args([
+            "install-service",
+            "--systemd",
+            "--launchd",
+            "--manifest",
+            "sentinel.toml",
+        ])
         .assert()
         .code(10);
 
