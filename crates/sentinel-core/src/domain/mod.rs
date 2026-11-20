@@ -1,5 +1,6 @@
 //! Core pure domain models and calculations.
 
+pub mod budget;
 pub mod bundle;
 pub mod cold_storage;
 pub mod compare;
