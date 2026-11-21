@@ -38,6 +38,8 @@ pub enum Commands {
 
     /// Audit contract storage placement, entry sizes, and cost-saving opportunities
     AuditKeys(AuditKeysArgs),
+    /// Generate a systemd or launchd service definition for autonomous watching
+    InstallService(InstallServiceArgs),
 }
 
 /// Command-line arguments for the `sentinel scan` command.
@@ -55,7 +57,7 @@ pub struct ScanArgs {
     #[arg(long, default_value = "testnet", value_name = "NETWORK")]
     pub network: String,
 
-    /// Output format for scan results: "text" (colorized ASCII table), "json" (machine-readable), "csv" (flat tabular export), or "sarif" (GitHub Code Scanning)
+    /// Output format for scan results: "text" (colorized ASCII table), "json" (machine-readable), "csv" (flat tabular export), "parquet" (binary columnar export, requires the `parquet` Cargo feature), or "sarif" (GitHub Code Scanning)
     #[arg(long, default_value = "text", value_name = "FORMAT")]
     pub format: String,
 
@@ -289,6 +291,28 @@ pub struct AuditKeysArgs {
     /// Maximum RPC retry attempts
     #[arg(long = "rpc-max-retries", value_name = "N")]
     pub rpc_max_retries: Option<u32>,
+/// Command-line arguments for `sentinel install-service`.
+#[derive(Args, Debug, Clone)]
+pub struct InstallServiceArgs {
+    /// Generate a systemd .service unit (mutually exclusive with --launchd)
+    #[arg(long, conflicts_with = "launchd")]
+    pub systemd: bool,
+
+    /// Generate a macOS launchd .plist (mutually exclusive with --systemd)
+    #[arg(long, conflicts_with = "systemd")]
+    pub launchd: bool,
+
+    /// Path to the TOML fleet manifest
+    #[arg(long, value_name = "PATH")]
+    pub manifest: std::path::PathBuf,
+
+    /// User account used by the service
+    #[arg(long, value_name = "USER")]
+    pub user: Option<String>,
+
+    /// Directory in which to write the generated service file
+    #[arg(long, value_name = "DIR")]
+    pub output_dir: Option<std::path::PathBuf>,
 }
 
 #[cfg(test)]
