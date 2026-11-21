@@ -26,5 +26,6 @@ wasmparser.workspace = true
 
 [dev-dependencies]
 wiremock.workspace = true
+tempfile.workspace = true
 tracing-subscriber.workspace = true
 tokio = { version = "1.38", features = ["macros", "rt-multi-thread", "time", "test-util"] }

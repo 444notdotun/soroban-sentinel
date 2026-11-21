@@ -30,6 +30,9 @@ pub enum SentinelError {
     #[error("Invalid RPC URL: {0}")]
     InvalidRpcUrl(String),
 
+    #[error("Snapshot error: {0}")]
+    SnapshotError(String),
+
     #[error("WASM analysis error: {0}")]
     WasmAnalysisError(String),
 }

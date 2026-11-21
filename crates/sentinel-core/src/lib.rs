@@ -16,10 +16,10 @@ pub use adapters::{
     derive_sac_allowance_key, derive_sac_balance_key, extract_instance_storage_breakdown,
     extract_sac_asset_info, extract_wasm_hash_from_instance_entry, footprint_to_xdr_base64,
     parse_contract_id, parse_key_expr, parse_ledger_footprint, parse_sc_address,
-    read_only_footprint, split_footprint_keys, summarize_scval, KeyPatternMatcher, RetryPolicy,
-    SorobanRpcClient,
+    read_only_footprint, split_footprint_keys, summarize_scval, KeyPatternMatcher, ReplayReader,
+    RetryPolicy, SentinelSnapshot, SnapshotHeader, SnapshotLedgerReader, SorobanRpcClient,
     DEFAULT_BASE_RETRY_DELAY_MS, DEFAULT_MAX_RETRIES, MAX_KEYS_PER_REQUEST, MAX_KEY_EXPR_DEPTH,
-    MAX_KEY_EXPR_LEN, MAX_WASM_ANALYSIS_BYTES,
+    MAX_KEY_EXPR_LEN, MAX_WASM_ANALYSIS_BYTES, SNAPSHOT_FORMAT_VERSION,
 };
 pub use domain::{
     calculate_remaining_ledgers, compare_reports, estimate_horizon_days,

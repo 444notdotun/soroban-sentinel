@@ -106,6 +106,10 @@ pub struct ScanArgs {
     /// Launch the interactive TUI dashboard (requires the `tui` Cargo feature and a TTY)
     #[arg(long)]
     pub tui: bool,
+
+    /// Replay an offline .sentinel-snap ledger snapshot instead of querying RPC
+    #[arg(long = "snapshot", value_name = "PATH")]
+    pub snapshot: Option<String>,
 }
 
 /// Command-line arguments for the cost-matrix command.
@@ -299,6 +303,7 @@ mod tests {
                 assert!(scan.baseline.is_none());
                 assert!(!scan.fail_on_regression);
                 assert!(!scan.tui);
+                assert!(scan.snapshot.is_none());
             }
             _ => panic!("expected scan command"),
         }
@@ -368,6 +373,7 @@ mod tests {
                 assert_eq!(scan.baseline.as_deref(), Some("baseline.json"));
                 assert!(scan.fail_on_regression);
                 assert!(scan.tui);
+                assert!(scan.snapshot.is_none());
             }
             _ => panic!("expected scan command"),
         }

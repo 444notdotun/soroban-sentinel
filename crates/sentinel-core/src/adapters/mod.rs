@@ -3,6 +3,7 @@
 pub mod auth;
 pub mod failover_rpc;
 pub mod key_expr;
+pub mod snapshot;
 pub mod soroban_rpc;
 pub mod wasm_sections;
 pub mod xdr_keys;
@@ -12,6 +13,10 @@ pub use auth::{
 };
 pub use failover_rpc::{EndpointHealthSnapshot, FailoverConfig, MultiRpcFailoverReader};
 pub use key_expr::{parse_key_expr, MAX_KEY_EXPR_DEPTH, MAX_KEY_EXPR_LEN};
+pub use snapshot::{
+    ReplayReader, SentinelSnapshot, SnapshotData, SnapshotHeader, SnapshotLedgerReader,
+    SNAPSHOT_FORMAT_VERSION,
+};
 pub use soroban_rpc::{
     validate_rpc_url, RetryPolicy, SorobanRpcClient, DEFAULT_BASE_RETRY_DELAY_MS,
     DEFAULT_MAX_RETRIES, MAX_KEYS_PER_REQUEST, MAX_RPC_RESPONSE_BYTES,
