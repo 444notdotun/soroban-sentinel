@@ -8,6 +8,7 @@ pub mod compare;
 pub mod debt;
 pub mod entry;
 pub mod footprint;
+pub mod key_pattern;
 pub mod planner;
 pub mod restore;
 pub mod risk;
@@ -26,6 +27,10 @@ pub use compare::{
 pub use debt::{RentDebt, RentDebtCalculator};
 pub use entry::{Durability, EntryType, InstanceStorageBreakdown, SacAssetInfo, StorageEntry};
 pub use footprint::{AtRiskFootprint, FootprintAccess, FootprintValidation, FootprintValidator};
+pub use key_pattern::{
+    parse_key_pattern, KeyPattern, KeyPatternCandidateInput, KeyPatternToken,
+    MAX_KEY_PATTERN_CANDIDATES, MAX_KEY_PATTERN_LEN,
+};
 pub use planner::{
     plan_extension, plan_extension_with_cost, DeferralReason, DeferredExtension, ExtensionPlan,
     ExtensionPlanRequest, PlannedExtension,

@@ -22,7 +22,7 @@ pub use xdr_keys::{
     derive_persistent_symbol_key, derive_persistent_xdr_key, derive_sac_allowance_key,
     derive_sac_balance_key, extract_instance_storage_breakdown, extract_sac_asset_info,
     extract_wasm_hash_from_instance_entry, parse_contract_id, parse_sc_address, safe_xdr_limits,
-    summarize_scval, XDR_MAX_BYTE_LENGTH, XDR_MAX_RECURSION_DEPTH,
+    summarize_scval, KeyPatternMatcher, XDR_MAX_BYTE_LENGTH, XDR_MAX_RECURSION_DEPTH,
 };
 
 #[cfg(feature = "fuzzing")]
