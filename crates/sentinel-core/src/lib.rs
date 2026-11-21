@@ -11,14 +11,14 @@ pub mod ports;
 pub mod usecases;
 
 pub use adapters::{
-    derive_contract_code_key, derive_contract_instance_key, derive_persistent_key_from_scval,
-    derive_persistent_symbol_key, derive_persistent_xdr_key, derive_sac_allowance_key,
-    derive_sac_balance_key, extract_instance_storage_breakdown, extract_sac_asset_info,
-    extract_wasm_hash_from_instance_entry, footprint_to_xdr_base64, parse_contract_id,
-    parse_key_expr, parse_ledger_footprint, parse_sc_address, read_only_footprint,
-    split_footprint_keys, summarize_scval, RetryPolicy, SorobanRpcClient,
+    analyze_wasm, derive_contract_code_key, derive_contract_instance_key,
+    derive_persistent_key_from_scval, derive_persistent_symbol_key, derive_persistent_xdr_key,
+    derive_sac_allowance_key, derive_sac_balance_key, extract_instance_storage_breakdown,
+    extract_sac_asset_info, extract_wasm_hash_from_instance_entry, footprint_to_xdr_base64,
+    parse_contract_id, parse_key_expr, parse_ledger_footprint, parse_sc_address,
+    read_only_footprint, split_footprint_keys, summarize_scval, RetryPolicy, SorobanRpcClient,
     DEFAULT_BASE_RETRY_DELAY_MS, DEFAULT_MAX_RETRIES, MAX_KEYS_PER_REQUEST, MAX_KEY_EXPR_DEPTH,
-    MAX_KEY_EXPR_LEN,
+    MAX_KEY_EXPR_LEN, MAX_WASM_ANALYSIS_BYTES,
 };
 pub use domain::{
     calculate_remaining_ledgers, compare_reports, estimate_horizon_days,
@@ -32,8 +32,9 @@ pub use domain::{
     InstanceStorageBreakdown, NetworkRentParameters, PlannedExtension, ProtocolScenarioReport,
     RestoreError, RestorePlan, RiskLevel, SacAssetInfo, ScenarioEntry, ScenarioEntryImpact,
     ScenarioError, SimulationCache, SimulationCacheEntry, SimulationCacheKey, StorageEntry,
-    ThresholdConfig, DEFAULT_CRITICAL_LEDGERS, DEFAULT_WARNING_LEDGERS, MAX_BASELINE_FILE_BYTES,
-    MAX_BUNDLE_FOOTPRINT_ENTRIES, SECONDS_PER_DAY, TARGET_LEDGER_CLOSE_SECONDS,
+    ThresholdConfig, WasmAnalysis, WasmSectionSizes, DEFAULT_CRITICAL_LEDGERS,
+    DEFAULT_WARNING_LEDGERS, MAX_BASELINE_FILE_BYTES, MAX_BUNDLE_FOOTPRINT_ENTRIES,
+    SECONDS_PER_DAY, TARGET_LEDGER_CLOSE_SECONDS,
 };
 pub use error::{SentinelError, SentinelResult};
 pub use ports::{

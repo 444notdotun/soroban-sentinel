@@ -13,6 +13,7 @@ pub mod restore;
 pub mod risk;
 pub mod scenario;
 pub mod ttl;
+pub mod wasm_analysis;
 
 pub use bundle::{
     plan_bundle_footprints, BundleError, BundleFootprint, MAX_BUNDLE_FOOTPRINT_ENTRIES,
@@ -42,3 +43,4 @@ pub use ttl::{
     estimate_remaining_days, estimate_remaining_seconds, estimate_remaining_seconds_with_velocity,
     SECONDS_PER_DAY, TARGET_LEDGER_CLOSE_SECONDS,
 };
+pub use wasm_analysis::{analyze_wasm_sections, WasmAnalysis, WasmSectionSizes};

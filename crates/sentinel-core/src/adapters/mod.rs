@@ -4,6 +4,7 @@ pub mod auth;
 pub mod failover_rpc;
 pub mod key_expr;
 pub mod soroban_rpc;
+pub mod wasm_sections;
 pub mod xdr_keys;
 
 pub use auth::{
@@ -15,6 +16,7 @@ pub use soroban_rpc::{
     validate_rpc_url, RetryPolicy, SorobanRpcClient, DEFAULT_BASE_RETRY_DELAY_MS,
     DEFAULT_MAX_RETRIES, MAX_KEYS_PER_REQUEST, MAX_RPC_RESPONSE_BYTES,
 };
+pub use wasm_sections::{analyze_wasm, MAX_WASM_ANALYSIS_BYTES};
 pub use xdr_keys::{
     derive_contract_code_key, derive_contract_instance_key, derive_persistent_key_from_scval,
     derive_persistent_symbol_key, derive_persistent_xdr_key, derive_sac_allowance_key,
