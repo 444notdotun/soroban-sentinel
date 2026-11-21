@@ -32,6 +32,7 @@ async fn main() {
         Commands::KeyEncode(args) => commands::run_key_encode(args),
         Commands::KeyDecode(args) => commands::run_key_decode(args),
         Commands::DiffReports(args) => commands::run_diff_reports(args),
+        Commands::Forecast(args) => commands::run_forecast(args).await,
     };
 
     // Flush buffered spans/metrics before exiting, since `process::exit`
