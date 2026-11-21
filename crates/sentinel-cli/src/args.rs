@@ -291,6 +291,8 @@ pub struct AuditKeysArgs {
     /// Maximum RPC retry attempts
     #[arg(long = "rpc-max-retries", value_name = "N")]
     pub rpc_max_retries: Option<u32>,
+}
+
 /// Command-line arguments for `sentinel install-service`.
 #[derive(Args, Debug, Clone)]
 pub struct InstallServiceArgs {
