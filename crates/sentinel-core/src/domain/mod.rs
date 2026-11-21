@@ -2,6 +2,7 @@
 
 pub mod budget;
 pub mod bundle;
+pub mod cache;
 pub mod cold_storage;
 pub mod compare;
 pub mod debt;
@@ -16,6 +17,7 @@ pub mod ttl;
 pub use bundle::{
     plan_bundle_footprints, BundleError, BundleFootprint, MAX_BUNDLE_FOOTPRINT_ENTRIES,
 };
+pub use cache::{footprint_cache_key, SimulationCache, SimulationCacheEntry, SimulationCacheKey};
 pub use compare::{
     compare_reports, BaselineDiff, BaselineDiffSummary, BaselineEntrySnapshot, BaselineSnapshot,
     ChangeCategory, EntryDiff, MAX_BASELINE_FILE_BYTES,
