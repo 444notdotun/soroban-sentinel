@@ -24,19 +24,19 @@ jobs:
         run: |
           set -euo pipefail
           case "${{ runner.os }}-${{ runner.arch }}" in
-            Linux-X64) asset=sentinel-linux-x86_64.tar.gz ;;
-            Linux-ARM64) asset=sentinel-linux-aarch64.tar.gz ;;
-            macOS-X64) asset=sentinel-macos-x86_64.tar.gz ;;
-            macOS-ARM64) asset=sentinel-macos-aarch64.tar.gz ;;
+            Linux-X64) asset=sentinel-x86_64-unknown-linux-gnu.tar.gz ;;
+            Linux-ARM64) asset=sentinel-aarch64-unknown-linux-gnu.tar.gz ;;
+            macOS-X64) asset=sentinel-x86_64-apple-darwin.tar.gz ;;
+            macOS-ARM64) asset=sentinel-aarch64-apple-darwin.tar.gz ;;
             *) echo "Unsupported self-test runner" >&2; exit 1 ;;
           esac
           release_dir="$RUNNER_TEMP/sentinel-fixtures/v0.1.0"
           mkdir -p "$release_dir"
           tar -czf "$release_dir/$asset" -C target/release sentinel
           if command -v sha256sum >/dev/null 2>&1; then
-            (cd "$release_dir" && sha256sum "$asset" > SHA256SUMS)
+            (cd "$release_dir" && sha256sum "./$asset" > SHA256SUMS)
           else
-            (cd "$release_dir" && shasum -a 256 "$asset" > SHA256SUMS)
+            (cd "$release_dir" && shasum -a 256 "./$asset" > SHA256SUMS)
           fi
           python3 -m http.server 8765 --bind 127.0.0.1 \
             --directory "$RUNNER_TEMP/sentinel-fixtures" \

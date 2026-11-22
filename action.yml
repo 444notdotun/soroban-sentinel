@@ -59,10 +59,10 @@ runs:
       run: |
         set -euo pipefail
         case "$RUNNER_OS-$RUNNER_ARCH" in
-          Linux-X64) asset="sentinel-linux-x86_64.tar.gz" ;;
-          Linux-ARM64) asset="sentinel-linux-aarch64.tar.gz" ;;
-          macOS-X64) asset="sentinel-macos-x86_64.tar.gz" ;;
-          macOS-ARM64) asset="sentinel-macos-aarch64.tar.gz" ;;
+          Linux-X64) asset="sentinel-x86_64-unknown-linux-gnu.tar.gz" ;;
+          Linux-ARM64) asset="sentinel-aarch64-unknown-linux-gnu.tar.gz" ;;
+          macOS-X64) asset="sentinel-x86_64-apple-darwin.tar.gz" ;;
+          macOS-ARM64) asset="sentinel-aarch64-apple-darwin.tar.gz" ;;
           *) echo "Unsupported runner: $RUNNER_OS-$RUNNER_ARCH" >&2; exit 1 ;;
         esac
         if [[ -n "${RELEASE_BASE_URL:-}" ]]; then
@@ -88,7 +88,11 @@ runs:
         curl -fsSLo "/tmp/$asset" "$base/$asset"
         curl -fsSLo /tmp/SHA256SUMS "$base/SHA256SUMS"
         cd /tmp
-        checksum_line=$(grep "  $asset$" SHA256SUMS)
+        checksum_line=$(awk -v asset="$asset" '{ name = $2; sub(/^\.\//, "", name); if (name == asset) { print; exit } }' SHA256SUMS)
+        if [[ -z "$checksum_line" ]]; then
+          echo "No SHA256SUMS entry found for $asset" >&2
+          exit 1
+        fi
         if command -v sha256sum >/dev/null 2>&1; then
           printf '%s\n' "$checksum_line" | sha256sum -c -
         else
