@@ -3,17 +3,20 @@
 pub mod alias;
 pub mod budget;
 pub mod bundle;
-pub mod cache;
+pub(crate) mod cache;
 pub mod cold_storage;
 pub mod compare;
 pub mod debt;
 pub mod entry;
 pub mod footprint;
 pub mod key_pattern;
+pub mod network_limits;
 pub mod planner;
+pub mod recommend;
 pub mod restore;
 pub mod risk;
-pub mod scenario;
+pub(crate) mod scenario;
+pub mod storage_audit;
 pub mod ttl;
 pub mod wasm_analysis;
 pub mod wasm_graph;
@@ -34,9 +37,14 @@ pub use key_pattern::{
     parse_key_pattern, KeyPattern, KeyPatternCandidateInput, KeyPatternToken,
     MAX_KEY_PATTERN_CANDIDATES, MAX_KEY_PATTERN_LEN,
 };
+pub use network_limits::NetworkLimits;
 pub use planner::{
     plan_extension, plan_extension_with_cost, DeferralReason, DeferredExtension, ExtensionPlan,
     ExtensionPlanRequest, PlannedExtension,
+};
+pub use recommend::{
+    build_recommendation_plan, calculate_extend_to, shell_quote, RecommendationAction,
+    RecommendationPlan, TTLRecommendation, CONSERVATIVE_DEFAULT_MAX_ENTRY_TTL,
 };
 pub use restore::{plan_restore_footprint, RestoreError, RestorePlan};
 pub use risk::{
@@ -45,6 +53,10 @@ pub use risk::{
 pub use scenario::{
     evaluate_protocol_scenario, NetworkRentParameters, ProtocolScenarioReport, ScenarioEntry,
     ScenarioEntryImpact, ScenarioError,
+};
+pub use storage_audit::{
+    analyze_storage_entry, estimate_annual_rent_savings, AuditEntry, AuditFinding,
+    AuditFindingKind, StorageAuditReport, MAX_SOROBAN_ENTRY_BYTES,
 };
 pub use ttl::{
     calculate_remaining_ledgers, estimate_horizon_days, estimate_horizon_days_with_velocity,
