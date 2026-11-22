@@ -34,9 +34,10 @@ pub use domain::{
     InstanceStorageBreakdown, NetworkRentParameters, PlannedExtension, ProtocolScenarioReport,
     RestoreError, RestorePlan, RiskLevel, SacAssetInfo, ScenarioEntry, ScenarioEntryImpact,
     ScenarioError, SimulationCache, SimulationCacheEntry, SimulationCacheKey, StorageEntry,
-    ThresholdConfig, WasmAnalysis, WasmSectionSizes, DEFAULT_CRITICAL_LEDGERS,
-    DEFAULT_WARNING_LEDGERS, MAX_BASELINE_FILE_BYTES, MAX_BUNDLE_FOOTPRINT_ENTRIES,
-    SECONDS_PER_DAY, TARGET_LEDGER_CLOSE_SECONDS,
+    ThresholdConfig, WasmAnalysis, WasmDependencyGraph, WasmGraphError, WasmGraphNode,
+    WasmRentLiability, WasmSectionSizes, DEFAULT_CRITICAL_LEDGERS, DEFAULT_WARNING_LEDGERS,
+    MAX_BASELINE_FILE_BYTES, MAX_BUNDLE_FOOTPRINT_ENTRIES, SECONDS_PER_DAY,
+    TARGET_LEDGER_CLOSE_SECONDS,
 };
 pub use error::{SentinelError, SentinelResult};
 pub use ports::{

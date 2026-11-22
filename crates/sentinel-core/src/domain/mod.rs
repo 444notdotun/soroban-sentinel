@@ -16,6 +16,7 @@ pub mod risk;
 pub mod scenario;
 pub mod ttl;
 pub mod wasm_analysis;
+pub mod wasm_graph;
 
 pub use alias::{AliasError, AliasRegistry};
 pub use bundle::{
@@ -51,3 +52,4 @@ pub use ttl::{
     SECONDS_PER_DAY, TARGET_LEDGER_CLOSE_SECONDS,
 };
 pub use wasm_analysis::{analyze_wasm_sections, WasmAnalysis, WasmSectionSizes};
+pub use wasm_graph::{WasmDependencyGraph, WasmGraphError, WasmGraphNode, WasmRentLiability};
