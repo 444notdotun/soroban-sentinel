@@ -2,7 +2,7 @@
 
 pub mod forecast;
 pub mod scan;
-pub mod scenario;
+pub(crate) mod scenario;
 
 pub use forecast::{ForecastExtensionUseCase, ForecastReport, ForecastRequest};
 pub use scan::{
