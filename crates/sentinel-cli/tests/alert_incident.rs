@@ -29,6 +29,8 @@ fn report(status: RiskLevel) -> TTLReport {
             status,
         )],
         overall_status: status,
+        archival_recommendations: Vec::new(),
+        sac_asset_info: None,
     }
 }
 

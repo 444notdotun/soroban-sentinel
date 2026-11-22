@@ -2,10 +2,14 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::Duration;
+use stellar_xdr::curr::{ReadXdr, SorobanTransactionData};
 
+use crate::domain::cache::{footprint_cache_key, SimulationCache, SimulationCacheEntry};
 use crate::error::{SentinelError, SentinelResult};
 use crate::ports::reader::{LatestLedgerInfo, LedgerReader, RawLedgerEntry};
+use crate::ports::simulator::SimulationEngine;
 
 /// Maximum number of keys allowed in a single `getLedgerEntries` request by Soroban RPC.
 pub const MAX_KEYS_PER_REQUEST: usize = 200;
@@ -147,12 +151,23 @@ fn parse_retry_after(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
     }
 }
 
+/// Subset of a `simulateTransaction` JSON-RPC result used for fee caching.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SimulateTransactionResult {
+    min_resource_fee: String,
+    latest_ledger: u32,
+    #[serde(default)]
+    transaction_data: Option<String>,
+}
+
 /// JSON-RPC 2.0 client for interacting with Soroban RPC nodes.
 #[derive(Debug, Clone)]
 pub struct SorobanRpcClient {
     rpc_url: String,
     http_client: reqwest::Client,
     retry_policy: RetryPolicy,
+    simulation_cache: Option<Arc<SimulationCache>>,
 }
 
 impl SorobanRpcClient {
@@ -173,6 +188,7 @@ impl SorobanRpcClient {
             rpc_url: rpc_url.into(),
             http_client,
             retry_policy: RetryPolicy::default(),
+            simulation_cache: None,
         }
     }
 
@@ -192,6 +208,7 @@ impl SorobanRpcClient {
             rpc_url: rpc_url.into(),
             http_client,
             retry_policy: RetryPolicy::default(),
+            simulation_cache: None,
         }
     }
 
@@ -221,7 +238,89 @@ impl SorobanRpcClient {
             .await
     }
 
+    /// Enables in-memory caching of simulation fee results for repeated footprints.
+    ///
+    /// Without this builder the client behaves exactly as before: every call to
+    /// [`Self::simulate_transaction`] performs a JSON-RPC simulation.
+    pub fn with_simulation_cache(mut self, cache: SimulationCache) -> Self {
+        self.simulation_cache = Some(Arc::new(cache));
+        self
+    }
+
+    /// Returns the configured simulation cache, if any.
+    pub fn simulation_cache(&self) -> Option<&SimulationCache> {
+        self.simulation_cache.as_deref()
+    }
+
+    /// Simulates a transaction and caches the fee result by footprint XDR hash.
+    ///
+    /// A cache hit never issues an RPC request. A miss, or an entry older than
+    /// the cache's ledger horizon, triggers `simulateTransaction`. CPU
+    /// instructions and memory bytes are taken from the returned
+    /// `SorobanTransactionData` XDR; memory bytes are the sum of read and write
+    /// bytes in the declared resource footprint.
+    #[tracing::instrument(skip(self, transaction_xdr_base64, footprint_xdr_base64))]
+    pub async fn simulate_transaction(
+        &self,
+        transaction_xdr_base64: &str,
+        footprint_xdr_base64: &str,
+        latest_ledger: u32,
+    ) -> SentinelResult<SimulationCacheEntry> {
+        let cache_key = footprint_cache_key(footprint_xdr_base64);
+        if let Some(cache) = &self.simulation_cache {
+            if let Some(cached) = cache.get(&cache_key, latest_ledger) {
+                return Ok(cached);
+            }
+        }
+
+        let result: SimulateTransactionResult = self
+            .send_rpc_request(
+                "simulateTransaction",
+                serde_json::json!({ "transaction": transaction_xdr_base64 }),
+            )
+            .await?;
+
+        let min_resource_fee = result.min_resource_fee.parse::<u64>().map_err(|error| {
+            SentinelError::SerializationError(format!(
+                "Invalid minResourceFee in simulateTransaction response: {error}"
+            ))
+        })?;
+
+        let (cpu_instructions, memory_bytes) = match result.transaction_data {
+            Some(transaction_data) => {
+                let decoded = SorobanTransactionData::from_xdr_base64(
+                    &transaction_data,
+                    crate::adapters::safe_xdr_limits(),
+                )
+                .map_err(|error| {
+                    SentinelError::SerializationError(format!(
+                        "Invalid transactionData in simulateTransaction response: {error}"
+                    ))
+                })?;
+                let resources = decoded.resources;
+                (
+                    u64::from(resources.instructions),
+                    u64::from(resources.read_bytes)
+                        .saturating_add(u64::from(resources.write_bytes)),
+                )
+            }
+            None => (0, 0),
+        };
+
+        let entry = SimulationCacheEntry {
+            min_resource_fee,
+            latest_ledger: result.latest_ledger,
+            cpu_instructions,
+            memory_bytes,
+        };
+        if let Some(cache) = &self.simulation_cache {
+            cache.insert(cache_key, entry.clone());
+        }
+        Ok(entry)
+    }
+
     /// Internal generic JSON-RPC 2.0 request dispatcher with retry and exponential backoff middleware.
+    #[tracing::instrument(skip(self, params), fields(rpc.method = method, rpc.url = %self.rpc_url))]
     pub(super) async fn send_rpc_request<P, R>(
         &self,
         method: &'static str,
@@ -445,6 +544,25 @@ impl LedgerReader for SorobanRpcClient {
     }
 }
 
+#[async_trait]
+impl SimulationEngine for SorobanRpcClient {
+    async fn simulate_transaction(
+        &self,
+        transaction_xdr_base64: &str,
+        latest_ledger: u32,
+    ) -> SentinelResult<crate::ports::RentEstimate> {
+        let result =
+            SorobanRpcClient::simulate_transaction(self, transaction_xdr_base64, "", latest_ledger)
+                .await?;
+        Ok(crate::ports::RentEstimate {
+            min_resource_fee_stroops: result.min_resource_fee,
+            latest_ledger: result.latest_ledger,
+            cpu_instructions: result.cpu_instructions,
+            memory_bytes: result.memory_bytes,
+        })
+    }
+}
+
 // --- Wire format DTOs ---
 
 #[derive(Debug, Serialize)]
@@ -547,6 +665,65 @@ where
         Some(serde_json::Value::Number(num)) => Ok(num.as_i64()),
         _ => Ok(None),
     }
+}
+
+/// Fuzzing entry point: parses a `getLatestLedger` JSON-RPC response body.
+///
+/// Mirrors the deserialization performed by [`SorobanRpcClient::get_latest_ledger`]
+/// after the response size cap has been enforced by the transport.
+#[cfg(feature = "fuzzing")]
+#[doc(hidden)]
+pub fn fuzz_parse_get_latest_ledger_response(body: &[u8]) -> SentinelResult<u32> {
+    if body.len() > MAX_RPC_RESPONSE_BYTES {
+        return Err(SentinelError::RpcResponseError {
+            code: -32600,
+            message: "RPC response exceeded maximum allowed size".to_string(),
+        });
+    }
+    let response: JsonRpcResponse<RpcLatestLedgerResult> =
+        serde_json::from_slice(body).map_err(|e| {
+            SentinelError::SerializationError(format!("Failed to parse JSON-RPC response: {}", e))
+        })?;
+    if let Some(error) = response.error {
+        return Err(SentinelError::RpcResponseError {
+            code: error.code,
+            message: error.message,
+        });
+    }
+    response
+        .result
+        .map(|r| r.sequence)
+        .ok_or_else(|| SentinelError::RpcResponseError {
+            code: -32603,
+            message: "Missing result field in JSON-RPC 2.0 response".to_string(),
+        })
+}
+
+/// Fuzzing entry point: parses a `getLedgerEntries` JSON-RPC response body.
+#[cfg(feature = "fuzzing")]
+#[doc(hidden)]
+pub fn fuzz_parse_get_ledger_entries_response(body: &[u8]) -> SentinelResult<usize> {
+    if body.len() > MAX_RPC_RESPONSE_BYTES {
+        return Err(SentinelError::RpcResponseError {
+            code: -32600,
+            message: "RPC response exceeded maximum allowed size".to_string(),
+        });
+    }
+    let response: JsonRpcResponse<GetLedgerEntriesResult> =
+        serde_json::from_slice(body).map_err(|e| {
+            SentinelError::SerializationError(format!("Failed to parse JSON-RPC response: {}", e))
+        })?;
+    if let Some(error) = response.error {
+        return Err(SentinelError::RpcResponseError {
+            code: error.code,
+            message: error.message,
+        });
+    }
+    Ok(response
+        .result
+        .and_then(|r| r.entries)
+        .map(|entries| entries.len())
+        .unwrap_or(0))
 }
 
 #[cfg(test)]
@@ -715,6 +892,18 @@ mod tests {
             res,
             Err(SentinelError::RpcResponseError { code: -32601, .. })
         ));
+    }
+
+    #[cfg(feature = "fuzzing")]
+    #[test]
+    fn test_fuzz_parse_entry_points_reject_oversized_and_accept_valid() {
+        let latest = br#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":22,"sequence":42}}"#;
+        assert_eq!(fuzz_parse_get_latest_ledger_response(latest).unwrap(), 42);
+        let entries = br#"{"jsonrpc":"2.0","id":1,"result":{"entries":[]}}"#;
+        assert_eq!(fuzz_parse_get_ledger_entries_response(entries).unwrap(), 0);
+        let huge = vec![b' '; MAX_RPC_RESPONSE_BYTES + 1];
+        assert!(fuzz_parse_get_latest_ledger_response(&huge).is_err());
+        assert!(fuzz_parse_get_ledger_entries_response(&huge).is_err());
     }
 
     #[test]

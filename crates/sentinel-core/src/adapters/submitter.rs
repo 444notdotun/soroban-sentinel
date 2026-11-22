@@ -149,6 +149,6 @@ impl TransactionSubmitter for SorobanRpcClient {
         };
         tokio::time::timeout(policy.poll_timeout, polling)
             .await
-            .unwrap_or_else(|_| Ok(SubmissionOutcome::TimedOut { tx_hash }))
+            .unwrap_or(Ok(SubmissionOutcome::TimedOut { tx_hash }))
     }
 }

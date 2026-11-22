@@ -53,7 +53,7 @@ It is structured as a **modular monolith** adhering to **hexagonal architecture 
 |  | sentinel-cli (Driving Adapters & CLI Entry Point)                           |  |
 |  |                                                                             |  |
 |  |  • Command Parser: clap 4 (sentinel scan, forecast, watch)                  |  |
-|  |  • Formatter Adapters: Terminal Table (comfy-table), JSON (serde), Markdown |  |
+|  |  • Formatter Adapters: Terminal Table (comfy-table), JSON, CSV, Markdown |  |
 |  |  • Configuration Adapter: sentinel.toml loader (Future Watch Mode)         |  |
 |  +-------------------------------------+---------------------------------------+  |
 |                                        |                                          |
@@ -89,9 +89,14 @@ The following table distinguishes between MVP release features and post-MVP road
 | **CLI (MVP)** | Single Contract Scan (`sentinel scan <ID>`) | Protocol 20+ | **Completed (v0.1.0)** | [MVP Scope](docs/MVP_SCOPE.md#1-mvp-feature-set-v010) |
 | **CLI (MVP)** | Terminal Table Output (`--format text`) | N/A | **Completed (v0.1.0)** | [MVP Scope](docs/MVP_SCOPE.md#1-mvp-feature-set-v010) |
 | **CLI (MVP)** | Machine-Readable JSON Output (`--format json`) | N/A | **Completed (v0.1.0)** | [MVP Scope](docs/MVP_SCOPE.md#1-mvp-feature-set-v010) |
+| **CLI** | Flat CSV Export (`--format csv`, `--output`) | N/A | **Available** | Issue #55 |
+| **CLI** | Flat Parquet Export (`--format parquet`, `--output`) | N/A | **Available (optional `parquet` feature)** | Issue #55 |
 | **CLI (MVP)** | Explicit Persistent Key Verification (`--key`, `--key-xdr`) | Protocol 20+ | **Completed (v0.1.0)** | [MVP Scope](docs/MVP_SCOPE.md#1-mvp-feature-set-v010) |
+| **CLI** | Interactive TUI Dashboard (`sentinel scan --tui`) | N/A | **Available (optional `tui` feature)** | Issue #42 |
+| **CLI** | Offline Snapshot Replay (`sentinel scan --snapshot <PATH>`) | N/A | **Available** | Issue #70 |
 | **CLI** | Markdown Output (`--format markdown`) | N/A | **Planned (Sprint 3)** | [Roadmap](docs/IMPLEMENTATION_ROADMAP.md#phase-3) |
 | **CLI** | Rent Simulation (`sentinel forecast <ID>`) | Protocol 20+ | **Planned (Sprint 3)** | [Roadmap](docs/IMPLEMENTATION_ROADMAP.md#phase-3) |
+| **CLI** | Archived State Restoration (`sentinel restore <ID>`) | CAP-0046 | **Available** | Issue #40 |
 | **CLI** | Fleet Watch Mode (`sentinel watch --config`) | Protocol 20+ | **Planned (Sprint 4)** | [Roadmap](docs/IMPLEMENTATION_ROADMAP.md#phase-4) |
 | **CLI** | In-Process Webhook Alerts (Slack/Discord) | N/A | **Planned (Sprint 4)** | [Roadmap](docs/IMPLEMENTATION_ROADMAP.md#phase-4) |
 | **CLI** | Prometheus Metrics Exporter (`:9100`) | N/A | **Planned (Sprint 4)** | [Roadmap](docs/IMPLEMENTATION_ROADMAP.md#phase-4) |
@@ -114,6 +119,33 @@ To operate soundly without making unsupported protocol assumptions:
 ---
 
 ## 5. Usage Guide & Output Examples
+
+### Check a fleet from a manifest
+
+Copy `sentinel.example.toml` to `sentinel.toml` and replace the sample contract IDs
+with your own. Run a single check in manifest order.
+
+```bash
+sentinel check --config sentinel.toml
+sentinel check --config sentinel.toml --format json
+```
+
+The optional `[defaults]` table sets the network, public RPC URL, and warning
+and critical thresholds in ledgers. Each `[[contracts]]` table requires an
+`id` and can specify a `name`, `keys`, `key_xdr`, and either threshold.
+`SOROBAN_RPC_URL` overrides the manifest endpoint. Set credentials in the
+environment. The command validates the entire manifest before querying the
+network and accepts up to 100 contracts in a file of up to 256 KiB.
+
+Text shows each contract and an overall summary. JSON contains an ordered
+`contracts` array and a `summary` object with counts by outcome. Every contract
+result contains `id`, `name`, `status`, `report`, and `error` fields. Unavailable
+values are null.
+
+The command continues after an individual RPC failure. Any RPC failure takes
+precedence and exits 11. Otherwise the worst contract result determines the
+exit code (0 for OK, 1 for warning, 2 for critical or archived). Invalid input
+exits 10 before any RPC requests.
 
 ### Quickstart: Building from Source
 ```bash
@@ -161,6 +193,28 @@ sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
 | `bytes:` | Hex-encoded raw byte array | `bytes:deadbeef`, `bytes:0x1234` |
 | `vec[...]` | Nested composite vector (up to 16 nesting levels) | `vec[sym:Allowance, addr:G..., addr:C...]` |
 
+### Offline Snapshot Replay (`--snapshot`)
+Use a deterministic `.sentinel-snap` archive to debug TTL calculations, regression
+diffing, and risk evaluation without RPC access:
+
+```bash
+# Replay a previously recorded snapshot
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  --network testnet \
+  --snapshot state.sentinel-snap \
+  --format json
+```
+
+Snapshots store the network passphrase, protocol version, latest ledger,
+ledger-close velocity, and every queried ledger entry. Replay validates the
+passphrase and format version before use, returns entries in deterministic order,
+and produces the same `TTLReport` as the live scan that recorded it. Use the same
+`--network` that produced the snapshot; `--snapshot` cannot be combined with
+`--rpc-url`, `--rpc-timeout`, `--rpc-max-retries`, `--baseline`, `--format csv`,
+or `--format parquet`. Unset `SOROBAN_RPC_URL` when replaying offline because an
+RPC URL from the environment is treated as a conflicting flag. Invalid or
+corrupt snapshots exit with code 10.
+
 ### Baseline Scan Comparison & Regression Gating (`--baseline`)
 Track storage decay and detect changes between inspection intervals by comparing a scan against a previous JSON report:
 
@@ -178,6 +232,57 @@ sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
   --fail-on-regression
 ```
 
+### Tabular CSV Export (`--format csv`)
+For analytics in DuckDB, ClickHouse, Pandas, or spreadsheets, export one flat
+row per storage entry:
+
+```bash
+# Stream CSV to stdout
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  --format csv
+
+# Write directly to a file (existing files are overwritten/truncated)
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  --format csv --output fleet-ttl.csv
+```
+
+The header is exactly:
+`timestamp,network,contract_id,key_xdr,durability,byte_size,live_until_ledger,remaining_ledgers,status`.
+
+Timestamps are UTC ISO 8601 (`YYYY-MM-DDTHH:MM:SSZ`), numeric fields are plain
+integers, and output contains no terminal escape codes. `--output` writes the
+same bytes that would go to stdout, leaving stdout empty. An unwritable output
+path exits 10. CSV export is incompatible with `--baseline` because baseline
+diffs are object-shaped and do not fit the fixed flat schema; combining them
+exits 10. Contract code entries leave `key_xdr` blank because the WASM hash is
+not retained in the scan report.
+
+### Tabular Parquet Export (`--format parquet`)
+
+The same nine columns and values are available as a binary Parquet file for
+columnar analytics. Parquet support is an optional Cargo feature so the default
+binary stays light:
+
+```bash
+cargo build -p sentinel-cli --features parquet
+
+# Write a Parquet file (binary output requires a file or a redirect)
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  --format parquet --output fleet-ttl.parquet
+
+# Piped/redirected stdout is allowed
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  --format parquet > fleet-ttl.parquet
+```
+
+The `timestamp` column is a UTC `TIMESTAMP_MICROS`, `byte_size`,
+`live_until_ledger`, and `remaining_ledgers` are nullable 64-bit integers, and
+all other columns are strings. Rows with no ledger key XDR (contract code
+entries) store a null `key_xdr`. Writing binary data to an interactive terminal
+is refused with exit code 10; running without the `parquet` feature also exits
+10 with a rebuild hint. `--baseline` is rejected for this flat schema just like
+CSV. Scan exit codes (0, 1, 2, 10, 11) are unchanged.
+
 ### Advanced RPC & Velocity Options
 ```bash
 # Configure RPC timeout (1–120s) and retry attempts (0–10) with exponential backoff & jitter
@@ -189,6 +294,82 @@ sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
 sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
   --ledger-seconds 5.8
 ```
+
+### OpenTelemetry OTLP Export (`--otlp-endpoint`)
+Send distributed traces and metrics for scan execution, Soroban RPC calls, and
+XDR parsing to any OTLP-compatible collector:
+
+```bash
+# Configure per invocation
+sentinel --otlp-endpoint http://localhost:4317 scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+
+# Or use the standard OpenTelemetry environment variable
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+```
+
+The CLI exports `sentinel.contracts.scanned`, `sentinel.entries.expired`, and
+`sentinel.findings.critical` counters, flushes buffered telemetry before exit,
+and continues normally with a warning if the collector is unreachable.
+
+### Bundling TTL Extensions
+Create unsigned `ExtendFootprintTTL` transaction envelopes for multiple contracts.
+Each transaction contains a deduplicated read-only footprint capped at 40 entries,
+is simulated against Soroban RPC, and reports its fee plus the combined fee:
+
+```bash
+sentinel bundle \
+  --contract CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  --contract <ANOTHER_CONTRACT_ID> \
+  --key ADMIN \
+  --key-xdr <BASE64_SCVAL_XDR> \
+  --source-account <SOURCE_ACCOUNT_G...> \
+  --extend-by 100000 \
+  --network testnet
+```
+
+The source account must exist on the selected network. `--extend-by` is required;
+`--base-fee` defaults to 100 stroops per transaction and can be overridden.
+Repeated `--key` and `--key-xdr` values are applied to each command-line contract.
+Alternatively, `--manifest contracts.json` accepts JSON in this form:
+
+```json
+{
+  "contracts": [
+    {
+      "contract_id": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "keys": ["ADMIN"],
+      "key_xdr": ["<BASE64_SCVAL_XDR>"]
+    }
+  ]
+}
+```
+
+Bundling does not sign or submit transactions. Review and sign the returned XDR
+with a separate trusted wallet before submission.
+
+### Restoring Archived State
+When persistent keys (or a contract instance) have expired, TTL extension no
+longer works. The `restore` command detects archived keys, builds a
+`RestoreFootprintOp`, simulates the resource fee, and emits an unsigned
+transaction envelope plus the equivalent `stellar contract restore` commands:
+
+```bash
+sentinel restore CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+  --key ADMIN \
+  --key-expr 'sym:Balance' \
+  --source-account <SOURCE_ACCOUNT_G...> \
+  --network testnet \
+  --format json
+```
+
+With no `--key`/`--key-expr`/`--key-xdr` flags, the contract instance is
+checked. Keys that are still live are ignored; if none are archived the command
+exits 10 without simulating. `--source-account` is optional; when omitted a
+placeholder account is used only for simulation and the generated CLI commands
+omit `--source-account` so you can supply your own identity. The output uses
+`--build-only`, so the commands print a transaction for review rather than
+submitting it. No signing keys are handled or required.
 
 *Actual Terminal Output:*
 ```text
@@ -202,6 +383,28 @@ Contract: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC | Network: te
 +-----------------------+------------+------------+-------------------+----------------------+--------+
 Summary: 3 entries checked. 3 OK, 0 WARN, 0 CRITICAL/ARCHIVED.
 ```
+
+### Interactive TUI Dashboard
+For contracts with many storage keys, build with the optional `tui` feature and
+launch the dashboard:
+
+```bash
+cargo build --release -p sentinel-cli --features tui
+
+sentinel scan CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC --tui
+```
+
+The dashboard shows a scrollable table with entry key, durability, byte size,
+remaining ledgers, and health status, plus a color-coded TTL gauge for the
+selected key. Use `Up`/`Down` (or `PgUp`/`PgDn`) to navigate rows, `Left`/`Right`
+to change sort column, `s` to reverse the sort direction, `Tab` to switch between
+the table and detail panels, and `q` or `Esc` to exit. Window resize events are
+handled by reflowing the layout.
+
+The `tui` feature is disabled by default so the standard binary stays
+lightweight. Running `--tui` without the feature exits 10 with a rebuild hint;
+with the feature enabled it also exits 10 if stdout is not a TTY. Mouse input
+and web hosting are not supported.
 
 ### Emitting Machine-Readable JSON (CI/CD Pipelines)
 ```bash
