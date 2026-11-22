@@ -59,7 +59,7 @@ async fn main() {
     let exit_code = match cli.command {
         Commands::Check(args) => commands::run_check(args).await,
         Commands::CostMatrix(args) => commands::run_cost_matrix(args).await,
-        Commands::Scan(args) => commands::run_scan(args).await,
+        Commands::Scan(args) => commands::run_scan(*args).await,
         Commands::Bundle(args) => commands::run_bundle(args).await,
         Commands::AuditKeys(args) => commands::run_audit_keys(args).await,
         Commands::Restore(args) => commands::run_restore(args).await,
@@ -68,6 +68,8 @@ async fn main() {
         Commands::KeyEncode(args) => commands::run_key_encode(args),
         Commands::KeyDecode(args) => commands::run_key_decode(args),
         Commands::DiffReports(args) => commands::run_diff_reports(args),
+        Commands::Doctor(args) => commands::doctor::run_doctor(args).await,
+        Commands::Watch(args) => commands::watch::run_watch(*args).await,
         Commands::Forecast(args) => commands::run_forecast(args).await,
     };
 
