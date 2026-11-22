@@ -29,6 +29,10 @@ async fn main() {
         Commands::AuditKeys(args) => commands::run_audit_keys(args).await,
         Commands::Restore(args) => commands::run_restore(args).await,
         Commands::InstallService(args) => commands::run_install_service(args),
+        Commands::Init(args) => commands::run_init(args),
+        Commands::KeyEncode(args) => commands::run_key_encode(args),
+        Commands::KeyDecode(args) => commands::run_key_decode(args),
+        Commands::DiffReports(args) => commands::run_diff_reports(args),
     };
 
     // Flush buffered spans/metrics before exiting, since `process::exit`
