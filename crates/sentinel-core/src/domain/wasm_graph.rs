@@ -79,8 +79,8 @@ impl WasmDependencyGraph {
         wasm_hash: [u8; 32],
         monthly_rent_stroops: u128,
     ) -> Result<(), WasmGraphError> {
-        let contract_id = contract_id.into();
-        if contract_id.trim().is_empty() {
+        let contract_id = contract_id.into().trim().to_owned();
+        if contract_id.is_empty() {
             return Err(WasmGraphError::EmptyContractId);
         }
 

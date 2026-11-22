@@ -228,6 +228,25 @@ fn instance_without_explicit_code_registration_is_tracked() {
 }
 
 #[test]
+fn contract_ids_are_canonicalized_before_indexing() {
+    let mut graph = WasmDependencyGraph::new();
+    let hash = [12u8; 32];
+    let instance = contract(12);
+
+    graph
+        .register_instance(format!("  {instance}  "), hash, 20)
+        .unwrap();
+
+    assert_eq!(graph.wasm_hash_for_instance(&instance), Some(hash));
+    assert_eq!(graph.instance_count(), 1);
+    assert_eq!(
+        graph.referencing_contracts(&hash).collect::<Vec<_>>(),
+        vec![instance.as_str()]
+    );
+    assert!(graph.unlink_instance(&instance));
+}
+
+#[test]
 fn empty_contract_ids_are_rejected() {
     let mut graph = WasmDependencyGraph::new();
     for id in ["", "   "] {
