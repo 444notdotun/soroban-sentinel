@@ -13,6 +13,7 @@ use sentinel_core::domain::compare::{compare_reports, BaselineSnapshot, MAX_BASE
 use sentinel_core::domain::{RiskLevel, ThresholdConfig, DEFAULT_CRITICAL_LEDGERS};
 use sentinel_core::error::SentinelError;
 use sentinel_core::usecases::{ScanContractUseCase, ScanRequest, TTLReport};
+use sentinel_core::{AlertKind, AlertMinLevel, AlertNotifier, WebhookAlertNotifier};
 
 use crate::args::ScanArgs;
 #[cfg(feature = "parquet")]
@@ -386,6 +387,29 @@ pub async fn run_scan(mut args: ScanArgs) -> i32 {
             }
         }
     };
+
+    if let Some(webhook) = args.alert_webhook.as_deref() {
+        let notifier = match WebhookAlertNotifier::new(webhook) {
+            Ok(notifier) => notifier,
+            Err(error) => {
+                eprintln!("Error: {error}");
+                return EXIT_INVALID_ARGS;
+            }
+        };
+        let kind = match args.alert_kind.as_str() {
+            "slack" => AlertKind::Slack,
+            "discord" => AlertKind::Discord,
+            _ => return EXIT_INVALID_ARGS,
+        };
+        let min_level = match args.alert_min_level.as_str() {
+            "warn" => AlertMinLevel::Warn,
+            "critical" => AlertMinLevel::Critical,
+            _ => return EXIT_INVALID_ARGS,
+        };
+        if let Err(_error) = notifier.notify(&report, kind, min_level).await {
+            eprintln!("Warning: alert delivery failed");
+        }
+    }
 
     #[cfg(feature = "tui")]
     if args.tui {

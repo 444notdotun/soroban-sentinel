@@ -9,6 +9,7 @@ use stellar_xdr::curr::{ReadXdr, SorobanTransactionData};
 use crate::domain::cache::{footprint_cache_key, SimulationCache, SimulationCacheEntry};
 use crate::error::{SentinelError, SentinelResult};
 use crate::ports::reader::{LatestLedgerInfo, LedgerReader, RawLedgerEntry};
+use crate::ports::simulator::SimulationEngine;
 
 /// Maximum number of keys allowed in a single `getLedgerEntries` request by Soroban RPC.
 pub const MAX_KEYS_PER_REQUEST: usize = 200;
@@ -520,6 +521,25 @@ impl LedgerReader for SorobanRpcClient {
         } else {
             Ok(None)
         }
+    }
+}
+
+#[async_trait]
+impl SimulationEngine for SorobanRpcClient {
+    async fn simulate_transaction(
+        &self,
+        transaction_xdr_base64: &str,
+        latest_ledger: u32,
+    ) -> SentinelResult<crate::ports::RentEstimate> {
+        let result =
+            SorobanRpcClient::simulate_transaction(self, transaction_xdr_base64, "", latest_ledger)
+                .await?;
+        Ok(crate::ports::RentEstimate {
+            min_resource_fee_stroops: result.min_resource_fee,
+            latest_ledger: result.latest_ledger,
+            cpu_instructions: result.cpu_instructions,
+            memory_bytes: result.memory_bytes,
+        })
     }
 }
 
