@@ -14,6 +14,8 @@ pub use args::{
     AuditKeysArgs, BundleArgs, Cli, Commands, InstallServiceArgs, RestoreArgs, ScanArgs,
     BundleArgs, Cli, Commands, DiffReportsArgs, InitArgs, InstallServiceArgs, KeyDecodeArgs,
     KeyEncodeArgs, RestoreArgs, ScanArgs,
+    BundleArgs, Cli, Commands, DiffReportsArgs, ForecastArgs, InitArgs, InstallServiceArgs,
+    KeyDecodeArgs, KeyEncodeArgs, RestoreArgs, ScanArgs,
 };
 pub use commands::{
     resolve_rpc_url, run_bundle, run_diff_reports, run_init, run_install_service, run_key_decode,

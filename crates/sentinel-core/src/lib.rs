@@ -25,6 +25,14 @@ pub use adapters::{
     parse_contract_id, parse_key_expr, parse_ledger_footprint, parse_sc_address,
     read_only_footprint, split_footprint_keys, summarize_scval, KeyPatternMatcher, ReplayReader,
     RetryPolicy, SentinelSnapshot, SnapshotHeader, SnapshotLedgerReader, SorobanRpcClient,
+    analyze_wasm, build_extend_footprint_ttl_envelope, derive_contract_code_key,
+    derive_contract_instance_key, derive_persistent_key_from_scval, derive_persistent_symbol_key,
+    derive_persistent_xdr_key, derive_sac_allowance_key, derive_sac_balance_key,
+    envelope_to_xdr_base64, extract_instance_storage_breakdown, extract_sac_asset_info,
+    extract_wasm_hash_from_instance_entry, footprint_to_xdr_base64, parse_contract_id,
+    parse_key_expr, parse_ledger_footprint, parse_sc_address, read_only_footprint,
+    split_footprint_keys, summarize_scval, KeyPatternMatcher, ReplayReader, RetryPolicy,
+    SentinelSnapshot, SnapshotHeader, SnapshotLedgerReader, SorobanRpcClient, WebhookAlertNotifier,
     DEFAULT_BASE_RETRY_DELAY_MS, DEFAULT_MAX_RETRIES, MAX_KEYS_PER_REQUEST, MAX_KEY_EXPR_DEPTH,
     MAX_KEY_EXPR_LEN, MAX_WASM_ANALYSIS_BYTES, SNAPSHOT_FORMAT_VERSION,
 };
@@ -60,10 +68,12 @@ pub use domain::{
 };
 pub use error::{SentinelError, SentinelResult};
 pub use ports::{
-    CacheStats, CachedLedgerReader, LatestLedgerInfo, LedgerReader, MockLedgerReader,
-    RawLedgerEntry,
+    AlertKind, AlertMinLevel, AlertNotifier, CacheStats, CachedLedgerReader, LatestLedgerInfo,
+    LedgerReader, MockLedgerReader, MockSimulationEngine, RawLedgerEntry, RentEstimate,
+    SimulationEngine,
 };
 pub use usecases::{
-    compute_overall_status, ProtocolScenarioUseCase, ReportSummary, ScanContractUseCase,
-    ScanRequest, StorageEntryReport, TTLReport,
+    compute_overall_status, ForecastExtensionUseCase, ForecastReport, ForecastRequest,
+    ProtocolScenarioUseCase, ReportSummary, ScanContractUseCase, ScanRequest, StorageEntryReport,
+    TTLReport,
 };
