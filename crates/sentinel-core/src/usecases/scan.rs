@@ -618,13 +618,13 @@ impl<R: LedgerReader> ScanContractUseCase<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::burn_rate::{BurnRateSource, LedgerCloseSample};
     use stellar_xdr::curr::{
         ContractCodeEntry, ContractCodeEntryExt, ContractDataDurability, ContractDataEntry,
         ContractExecutable, ExtensionPoint, Hash, LedgerEntryData, Limits, ScAddress,
         ScContractInstance, ScSymbol, ScVal,
     };
 
-    use crate::domain::burn_rate::{BurnRateSource, LedgerCloseSample};
     use crate::ports::mock::MockLedgerReader;
     use crate::ports::reader::RawLedgerEntry;
 
@@ -1020,40 +1020,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_scan_with_historical_samples_uses_measured_burn_rate() {
     async fn test_scan_stellar_asset_contract_extracts_sac_metadata() {
         let contract_bytes = [60u8; 32];
         let contract_strkey = stellar_strkey::Contract(contract_bytes).to_string();
 
         let instance_key = derive_contract_instance_key(&contract_bytes).unwrap();
-        let instance_xdr = make_test_instance_xdr(contract_bytes, [61u8; 32]);
-        let instance_raw = RawLedgerEntry::new(&instance_key, &instance_xdr, 5_500_000, 5_400_000);
-
-        // Ledgers 100, 200 and 300 closed after 1000, 1550 and 2100 seconds:
-        // an exactly 5.5s/ledger linear trend.
-        let samples = vec![
-            LedgerCloseSample::new(100, 1_000),
-            LedgerCloseSample::new(200, 1_550),
-            LedgerCloseSample::new(300, 2_100),
-        ];
-        let mock_reader = MockLedgerReader::new()
-            .with_latest_ledger(5_400_000, 22)
-            .with_close_samples(samples)
-            .with_entry(instance_raw);
-
-        let usecase = ScanContractUseCase::new(mock_reader);
-        let request = ScanRequest::new(&contract_strkey).with_sample_window(250);
-
-        let report = usecase.execute(request).await.unwrap();
-
-        assert_eq!(report.ledger_velocity_seconds, 5.5);
-        assert_eq!(report.burn_rate.source, BurnRateSource::Measured);
-        assert_eq!(report.burn_rate.sample_count, 3);
-        assert_eq!(report.burn_rate.observed_ledgers, 200);
-        assert_eq!(report.burn_rate.latest_close_time, Some(2_100));
-
-        let inst = &report.entries[0];
-        assert_eq!(inst.estimated_remaining_seconds, 550_000.0);
         let entry_data = LedgerEntryData::ContractData(ContractDataEntry {
             ext: ExtensionPoint::V0,
             contract: ScAddress::Contract(Hash(contract_bytes)),
@@ -1149,5 +1120,41 @@ mod tests {
             .find(|e| e.key_identifier == "code_wasm")
             .unwrap();
         assert!(code_rep.instance_storage_keys.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_scan_with_historical_samples_uses_measured_burn_rate() {
+        let contract_bytes = [60u8; 32];
+        let contract_strkey = stellar_strkey::Contract(contract_bytes).to_string();
+
+        let instance_key = derive_contract_instance_key(&contract_bytes).unwrap();
+        let instance_xdr = make_test_instance_xdr(contract_bytes, [61u8; 32]);
+        let instance_raw = RawLedgerEntry::new(&instance_key, &instance_xdr, 5_500_000, 5_400_000);
+
+        // Ledgers 100, 200 and 300 closed after 1000, 1550 and 2100 seconds:
+        // an exactly 5.5s/ledger linear trend.
+        let samples = vec![
+            LedgerCloseSample::new(100, 1_000),
+            LedgerCloseSample::new(200, 1_550),
+            LedgerCloseSample::new(300, 2_100),
+        ];
+        let mock_reader = MockLedgerReader::new()
+            .with_latest_ledger(5_400_000, 22)
+            .with_close_samples(samples)
+            .with_entry(instance_raw);
+
+        let usecase = ScanContractUseCase::new(mock_reader);
+        let request = ScanRequest::new(&contract_strkey).with_sample_window(250);
+
+        let report = usecase.execute(request).await.unwrap();
+
+        assert_eq!(report.ledger_velocity_seconds, 5.5);
+        assert_eq!(report.burn_rate.source, BurnRateSource::Measured);
+        assert_eq!(report.burn_rate.sample_count, 3);
+        assert_eq!(report.burn_rate.observed_ledgers, 200);
+        assert_eq!(report.burn_rate.latest_close_time, Some(2_100));
+
+        let inst = &report.entries[0];
+        assert_eq!(inst.estimated_remaining_seconds, 550_000.0);
     }
 }
