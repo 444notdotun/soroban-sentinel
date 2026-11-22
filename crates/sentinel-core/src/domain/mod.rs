@@ -1,5 +1,6 @@
 //! Core pure domain models and calculations.
 
+pub mod alias;
 pub mod budget;
 pub mod bundle;
 pub mod cache;
@@ -16,6 +17,7 @@ pub mod scenario;
 pub mod ttl;
 pub mod wasm_analysis;
 
+pub use alias::{AliasError, AliasRegistry};
 pub use bundle::{
     plan_bundle_footprints, BundleError, BundleFootprint, MAX_BUNDLE_FOOTPRINT_ENTRIES,
 };

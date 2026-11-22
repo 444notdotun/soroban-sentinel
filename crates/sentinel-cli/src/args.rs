@@ -143,7 +143,7 @@ pub struct DiffReportsArgs {
 /// Command-line arguments for the `sentinel scan` command.
 #[derive(Args, Debug, Clone)]
 pub struct ScanArgs {
-    /// Target Soroban smart contract address (C... Strkey format)
+    /// Target Soroban smart contract address (C... Strkey format) or a contract alias
     #[arg(value_name = "CONTRACT_ID")]
     pub contract_id: String,
 
