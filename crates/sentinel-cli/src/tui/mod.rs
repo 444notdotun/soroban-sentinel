@@ -515,7 +515,6 @@ mod tests {
             entries,
             overall_status: RiskLevel::Ok,
             archival_recommendations: Vec::new(),
-            sac_asset_info: None,
         }
     }
 

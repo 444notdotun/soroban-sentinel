@@ -1,6 +1,6 @@
 //! Abstract port interfaces and mock adapters for Soroban Sentinel.
 
-pub mod cache;
+pub(crate) mod cache;
 pub mod mock;
 pub mod notifier;
 pub mod reader;

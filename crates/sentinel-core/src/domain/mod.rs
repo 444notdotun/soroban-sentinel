@@ -3,7 +3,7 @@
 pub mod alias;
 pub mod budget;
 pub mod bundle;
-pub mod cache;
+pub(crate) mod cache;
 pub mod cold_storage;
 pub mod compare;
 pub mod debt;
@@ -13,7 +13,7 @@ pub mod key_pattern;
 pub mod planner;
 pub mod restore;
 pub mod risk;
-pub mod scenario;
+pub(crate) mod scenario;
 pub mod storage_audit;
 pub mod ttl;
 pub mod wasm_analysis;
