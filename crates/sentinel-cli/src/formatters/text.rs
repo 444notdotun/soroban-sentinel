@@ -21,7 +21,7 @@ fn resolve_no_color(no_color_flag: bool, no_color_env: Option<&OsStr>) -> bool {
 
 /// Returns `true` when ANSI color output should be suppressed via `--no-color` or `NO_COLOR`.
 pub fn is_color_disabled(no_color_flag: bool) -> bool {
-    no_color_flag || is_no_color_env()
+    resolve_no_color(no_color_flag, std::env::var_os("NO_COLOR").as_deref())
 }
 
 /// Formats an integer or numeric display type with standard thousands commas (e.g. 5,420,100).
