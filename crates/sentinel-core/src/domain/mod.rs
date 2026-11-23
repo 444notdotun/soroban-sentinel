@@ -3,6 +3,7 @@
 pub mod alias;
 pub mod budget;
 pub mod bundle;
+pub mod burn_rate;
 pub(crate) mod cache;
 pub mod cold_storage;
 pub mod compare;
@@ -27,6 +28,11 @@ pub mod wasm_analysis;
 pub use alias::{AliasError, AliasRegistry};
 pub use bundle::{
     plan_bundle_footprints, BundleError, BundleFootprint, MAX_BUNDLE_FOOTPRINT_ENTRIES,
+};
+pub use burn_rate::{
+    calculate_burn_rate, project_exhaustion, validate_sample_window, BurnRate, BurnRateError,
+    BurnRateSource, LedgerCloseSample, ProjectedExhaustion, DEFAULT_SAMPLE_WINDOW_LEDGERS,
+    MAX_SAMPLE_WINDOW_LEDGERS, MIN_SAMPLE_WINDOW_LEDGERS,
 };
 pub use cache::{footprint_cache_key, SimulationCache, SimulationCacheEntry, SimulationCacheKey};
 pub use compare::{
