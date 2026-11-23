@@ -299,6 +299,9 @@ mod tests {
             overall_status: RiskLevel::Warn,
             archival_recommendations: Vec::new(),
             sac_asset_info: None,
+            contract_code_hash: None,
+            contract_bytecode_size: None,
+            contract_upgrade: None,
         };
 
         let output = render_text(&report);
@@ -366,6 +369,9 @@ mod tests {
             overall_status: RiskLevel::Archived,
             archival_recommendations: Vec::new(),
             sac_asset_info: None,
+            contract_code_hash: None,
+            contract_bytecode_size: None,
+            contract_upgrade: None,
         };
 
         let output = render_text(&report);
