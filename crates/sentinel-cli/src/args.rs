@@ -61,6 +61,9 @@ pub enum Commands {
     /// Compare two saved JSON TTL reports without using RPC
     DiffReports(DiffReportsArgs),
 
+    /// Compare a contract's storage health across two Stellar networks
+    DiffNetworks(DiffNetworksArgs),
+
     /// Estimate the fee for extending a contract footprint TTL
     Forecast(ForecastArgs),
 
@@ -205,6 +208,54 @@ pub struct DiffReportsArgs {
     /// Return exit code 2 when a risk regression or removal is found
     #[arg(long)]
     pub fail_on_regression: bool,
+}
+
+/// Command-line arguments for `sentinel diff-networks`.
+#[derive(Args, Debug, Clone)]
+pub struct DiffNetworksArgs {
+    /// Contract address to scan on both networks
+    #[arg(value_name = "CONTRACT_ID")]
+    pub contract_id: String,
+
+    /// First Stellar network
+    #[arg(long = "network-a", value_name = "NET_A")]
+    pub network_a: String,
+
+    /// Second Stellar network
+    #[arg(long = "network-b", value_name = "NET_B")]
+    pub network_b: String,
+
+    /// Custom Soroban RPC endpoint for network A
+    #[arg(long = "rpc-url-a", value_name = "URL")]
+    pub rpc_url_a: Option<String>,
+
+    /// Custom Soroban RPC endpoint for network B
+    #[arg(long = "rpc-url-b", value_name = "URL")]
+    pub rpc_url_b: Option<String>,
+
+    /// TTL horizon difference in ledgers that is considered significant
+    #[arg(
+        long = "ttl-drift-threshold",
+        default_value_t = 0,
+        value_name = "LEDGERS"
+    )]
+    pub ttl_drift_threshold: u32,
+
+    /// Persistent storage symbol key to compare (repeatable)
+    #[arg(long = "key", value_name = "SYMBOL")]
+    pub key: Vec<String>,
+
+    /// Persistent storage key encoded as base64 XDR (repeatable)
+    #[arg(long = "key-xdr", value_name = "BASE64_XDR")]
+    pub key_xdr: Vec<String>,
+
+    /// Persistent storage key encoded as a typed expression (repeatable)
+    #[arg(long = "key-expr", value_name = "EXPR")]
+    pub key_expr: Vec<String>,
+
+    /// Output format
+    #[arg(long, default_value = "text", value_parser = ["text", "json"])]
+    pub format: String,
 }
 
 /// Command-line arguments for the `sentinel scan` command.
