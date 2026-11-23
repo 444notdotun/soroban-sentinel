@@ -1,4 +1,5 @@
 use clap::{Args, Parser, Subcommand};
+use sentinel_core::domain::DEFAULT_SAMPLE_WINDOW_LEDGERS;
 
 /// Autonomous storage TTL monitoring and expiry-risk detection for Soroban smart contracts.
 #[derive(Parser, Debug)]
@@ -24,6 +25,8 @@ pub struct Cli {
 pub enum Commands {
     /// Scan a contract and inspect storage entry TTL status and expiry risk
     Scan(Box<ScanArgs>),
+    /// Rank resolved contract entries by serialized byte size
+    TopConsumers(TopConsumersArgs),
     /// Check Soroban RPC connectivity, network identity, and protocol support
     Doctor(DoctorArgs),
     /// Monitor one contract and notify configured incident providers
@@ -41,7 +44,7 @@ pub enum Commands {
     /// Detect archived persistent keys and assemble CAP-0046 restoration transactions
     Restore(RestoreArgs),
 
-    /// Scan contracts once from a TOML manifest
+    /// Check one contract as a monitoring plugin, or scan a fleet manifest
     Check(CheckArgs),
 
     /// Audit contract storage placement, entry sizes, and cost-saving opportunities
@@ -313,6 +316,14 @@ pub struct ScanArgs {
     #[arg(long = "ledger-seconds", value_name = "SECS")]
     pub ledger_seconds: Option<f64>,
 
+    /// Number of recent ledgers sampled to measure storage burn velocity (2–10000)
+    #[arg(
+        long = "sample-window",
+        default_value_t = DEFAULT_SAMPLE_WINDOW_LEDGERS,
+        value_name = "N_LEDGERS"
+    )]
+    pub sample_window: u32,
+
     /// Path to a previous JSON scan report baseline file for comparison
     #[arg(long = "baseline", value_name = "PATH")]
     pub baseline: Option<String>,
@@ -475,16 +486,57 @@ pub struct RestoreArgs {
 /// Command-line arguments for a one-shot manifest check.
 #[derive(Args, Debug)]
 #[command(
-    after_help = "Exit codes: 0 OK, 1 warning, 2 critical or archived, 10 invalid input, 11 RPC failure. Any RPC failure takes precedence over risk results."
+    after_help = "Single-contract monitoring exits: 0 OK, 1 WARNING, 2 CRITICAL, 3 UNKNOWN. Fleet mode exits: 0 OK, 1 warning, 2 critical or archived, 10 invalid input, 11 RPC failure."
 )]
 pub struct CheckArgs {
+    /// Single contract to check with Nagios exit codes and performance data
+    #[arg(value_name = "CONTRACT_ID")]
+    pub contract_id: Option<String>,
+    #[command(flatten)]
+    pub scan: StorageScanOptions,
     /// Path to the fleet manifest
-    #[arg(long, default_value = "sentinel.toml", value_name = "PATH")]
+    #[arg(
+        long,
+        default_value = "sentinel.toml",
+        value_name = "PATH",
+        conflicts_with = "contract_id"
+    )]
     pub config: std::path::PathBuf,
 
     /// Report format
     #[arg(long, default_value = "text", value_parser = ["text", "json"])]
     pub format: String,
+}
+
+/// Shared selection for read-only contract entry inspection.
+#[derive(Args, Debug, Clone)]
+pub struct StorageScanOptions {
+    #[arg(long, env = "SOROBAN_RPC_URL")]
+    pub rpc_url: Option<String>,
+    #[arg(long, default_value = "testnet")]
+    pub network: String,
+    #[arg(long = "key")]
+    pub key: Vec<String>,
+    #[arg(long = "key-xdr")]
+    pub key_xdr: Vec<String>,
+    #[arg(long = "key-expr")]
+    pub key_expr: Vec<String>,
+    #[arg(long, default_value_t = 120960)]
+    pub warning_threshold: u32,
+    #[arg(long)]
+    pub critical_threshold: Option<u32>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct TopConsumersArgs {
+    #[arg(value_name = "CONTRACT_ID")]
+    pub contract_id: String,
+    #[arg(long, default_value_t = 10)]
+    pub limit: usize,
+    #[arg(long, default_value = "text", value_parser = ["text", "json"])]
+    pub format: String,
+    #[command(flatten)]
+    pub scan: StorageScanOptions,
 }
 
 /// Command-line arguments for the `sentinel audit-keys` command.
@@ -643,6 +695,7 @@ mod tests {
                 assert!(scan.rpc_timeout.is_none());
                 assert!(scan.rpc_max_retries.is_none());
                 assert!(scan.ledger_seconds.is_none());
+                assert_eq!(scan.sample_window, DEFAULT_SAMPLE_WINDOW_LEDGERS);
                 assert!(scan.baseline.is_none());
                 assert!(!scan.fail_on_regression);
                 assert!(!scan.tui);
@@ -684,6 +737,8 @@ mod tests {
             "5",
             "--ledger-seconds",
             "5.5",
+            "--sample-window",
+            "250",
             "--baseline",
             "baseline.json",
             "--fail-on-regression",
@@ -713,6 +768,7 @@ mod tests {
                 assert_eq!(scan.rpc_timeout, Some(30));
                 assert_eq!(scan.rpc_max_retries, Some(5));
                 assert_eq!(scan.ledger_seconds, Some(5.5));
+                assert_eq!(scan.sample_window, 250);
                 assert_eq!(scan.baseline.as_deref(), Some("baseline.json"));
                 assert!(scan.fail_on_regression);
                 assert!(scan.tui);
