@@ -7,9 +7,11 @@ pub(crate) mod cache;
 pub mod cold_storage;
 pub mod compare;
 pub mod debt;
+pub mod durability_migration;
 pub mod entry;
 pub mod fee_bump;
 pub mod footprint;
+pub mod histogram;
 pub mod key_pattern;
 pub mod network_limits;
 pub mod planner;
@@ -72,3 +74,8 @@ pub use upgrade::{
     ContractUpgradeEvent,
 };
 pub use wasm_analysis::{analyze_wasm_sections, WasmAnalysis, WasmSectionSizes};
+
+pub use durability_migration::{
+    DurabilityMigrationAnalysis, MigrationRequest, RentAnalysisError, RentRates,
+};
+pub use histogram::{ExpirationBucket, ExpirationHistogram, HistogramBucket};
