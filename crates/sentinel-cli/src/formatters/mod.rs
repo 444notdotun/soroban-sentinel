@@ -2,6 +2,7 @@
 
 pub mod json;
 pub mod markdown;
+pub mod ndjson;
 #[cfg(feature = "parquet")]
 pub mod parquet;
 pub mod sarif;
@@ -10,6 +11,7 @@ pub mod text;
 
 pub use json::{render_json, render_json_with_diff, JsonEntryReport, JsonSummary, JsonTTLReport};
 pub use markdown::render_markdown;
+pub use ndjson::{build_ndjson_entries, render_ndjson, NdjsonEntry};
 #[cfg(feature = "parquet")]
 pub use parquet::render_parquet;
 pub use sarif::render_sarif;
