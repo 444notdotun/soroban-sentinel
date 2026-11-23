@@ -147,9 +147,7 @@ mod tests {
 
         let parsed: Vec<NdjsonEntry> = lines
             .iter()
-            .map(|line| {
-                serde_json::from_str(line).expect("Every NDJSON line must be valid JSON")
-            })
+            .map(|line| serde_json::from_str(line).expect("Every NDJSON line must be valid JSON"))
             .collect();
 
         for item in &parsed {
