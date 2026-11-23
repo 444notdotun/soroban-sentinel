@@ -35,3 +35,6 @@ pub use scan::{
 pub mod doctor;
 pub mod watch;
 pub use service::run_install_service;
+
+pub mod top_consumers;
+pub use top_consumers::run_top_consumers;
