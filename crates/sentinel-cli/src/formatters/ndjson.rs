@@ -135,10 +135,14 @@ mod tests {
             network: "testnet".to_string(),
             latest_ledger: 5_420_100,
             ledger_velocity_seconds: 5.0,
+            burn_rate: Default::default(),
             entries,
             overall_status: RiskLevel::Warn,
             archival_recommendations: Vec::new(),
             sac_asset_info: None,
+            contract_code_hash: None,
+            contract_bytecode_size: None,
+            contract_upgrade: None,
         };
 
         let output = render_ndjson(&report).expect("Should serialize cleanly to NDJSON");
@@ -185,10 +189,14 @@ mod tests {
             network: "mainnet".to_string(),
             latest_ledger: 5_000_000,
             ledger_velocity_seconds: 5.0,
+            burn_rate: Default::default(),
             entries: vec![],
             overall_status: RiskLevel::Ok,
             archival_recommendations: Vec::new(),
             sac_asset_info: None,
+            contract_code_hash: None,
+            contract_bytecode_size: None,
+            contract_upgrade: None,
         };
 
         let output = render_ndjson(&report).expect("Empty report should serialize cleanly");

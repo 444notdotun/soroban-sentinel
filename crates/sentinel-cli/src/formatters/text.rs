@@ -512,10 +512,14 @@ mod tests {
             network: "testnet".to_string(),
             latest_ledger: 5_420_000,
             ledger_velocity_seconds: 5.0,
+            burn_rate: Default::default(),
             entries,
             overall_status: RiskLevel::Archived,
             archival_recommendations: Vec::new(),
             sac_asset_info: None,
+            contract_code_hash: None,
+            contract_bytecode_size: None,
+            contract_upgrade: None,
         };
 
         // Sanity check: when color is enabled and styling is enforced, ANSI codes ARE emitted.
