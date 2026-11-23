@@ -23,7 +23,7 @@ use crate::args::ScanArgs;
 use crate::formatters::render_parquet;
 use crate::formatters::{
     render_csv, render_json_with_diff, render_markdown, render_ndjson, render_sarif,
-    render_text_with_diff,
+    render_text_with_diff_and_options,
 };
 
 /// Exit code: All evaluated storage entries have status OK.
@@ -604,7 +604,9 @@ pub async fn run_scan(mut args: ScanArgs) -> i32 {
 
     let output_result = match format.as_str() {
         "text" => {
-            let mut output = render_text_with_diff(&report, baseline_diff.as_ref());
+            let no_color = args.no_color || args.output.is_some();
+            let mut output =
+                render_text_with_diff_and_options(&report, baseline_diff.as_ref(), no_color);
             if let Some(plan) = recommendation_plan.as_ref() {
                 output.push('\n');
                 output.push_str(&render_recommendation_text(
