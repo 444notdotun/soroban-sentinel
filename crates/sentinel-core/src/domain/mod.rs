@@ -24,6 +24,7 @@ pub mod storage_audit;
 pub mod ttl;
 pub mod upgrade;
 pub mod wasm_analysis;
+pub mod wasm_graph;
 
 pub use alias::{AliasError, AliasRegistry};
 pub use bundle::{
@@ -81,6 +82,7 @@ pub use upgrade::{
     ContractUpgradeEvent,
 };
 pub use wasm_analysis::{analyze_wasm_sections, WasmAnalysis, WasmSectionSizes};
+pub use wasm_graph::{WasmDependencyGraph, WasmGraphError, WasmGraphNode, WasmRentLiability};
 
 pub use durability_migration::{
     DurabilityMigrationAnalysis, MigrationRequest, RentAnalysisError, RentRates,
