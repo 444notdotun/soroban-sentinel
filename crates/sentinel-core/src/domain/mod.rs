@@ -26,6 +26,7 @@ pub mod ttl;
 pub mod upgrade;
 pub mod wasm_analysis;
 pub mod wasm_graph;
+pub mod wasm_imports;
 
 pub use acceleration::{
     AcceleratedDecayWarning, AccelerationError, AccelerationReport, DecayClassification,
@@ -89,6 +90,10 @@ pub use upgrade::{
 };
 pub use wasm_analysis::{analyze_wasm_sections, WasmAnalysis, WasmSectionSizes};
 pub use wasm_graph::{WasmDependencyGraph, WasmGraphError, WasmGraphNode, WasmRentLiability};
+pub use wasm_imports::{
+    scan_wasm_imports, HostSubsystem, WasmEnvironmentProfile, WasmFunctionSignature, WasmImport,
+    WasmImportKind, WasmValueType,
+};
 
 pub use durability_migration::{
     DurabilityMigrationAnalysis, MigrationRequest, RentAnalysisError, RentRates,
