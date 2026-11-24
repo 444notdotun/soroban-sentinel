@@ -8,6 +8,7 @@ pub mod sc_address;
 pub mod simulation;
 pub mod snapshot;
 pub mod soroban_rpc;
+pub mod stellar_account;
 pub mod wasm_sections;
 pub mod webhook;
 pub mod xdr_keys;
@@ -28,6 +29,7 @@ pub use soroban_rpc::{
     validate_rpc_url, RetryPolicy, SorobanRpcClient, DEFAULT_BASE_RETRY_DELAY_MS,
     DEFAULT_MAX_RETRIES, MAX_BATCH_REQUESTS, MAX_KEYS_PER_REQUEST, MAX_RPC_RESPONSE_BYTES,
 };
+pub use stellar_account::fetch_account_signer_config;
 pub use wasm_sections::{analyze_wasm, MAX_WASM_ANALYSIS_BYTES};
 pub use webhook::WebhookAlertNotifier;
 pub use xdr_keys::{

@@ -2,6 +2,7 @@
 
 pub mod alias;
 pub mod budget;
+pub mod multisig;
 pub mod bundle;
 pub mod burn_rate;
 pub(crate) mod cache;
@@ -88,3 +89,7 @@ pub use durability_migration::{
     DurabilityMigrationAnalysis, MigrationRequest, RentAnalysisError, RentRates,
 };
 pub use histogram::{ExpirationBucket, ExpirationHistogram, HistogramBucket};
+pub use multisig::{
+    required_cosigners, verify_bumper_authority, AccountSignerConfig, AccountThresholds,
+    MultisigError, MultisigVerificationResult, SignerEntry,
+};
