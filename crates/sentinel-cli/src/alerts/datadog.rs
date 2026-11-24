@@ -11,9 +11,10 @@ use sentinel_core::{RiskLevel, StorageEntryReport, TTLReport};
 use serde_json::{json, Value};
 
 /// Supported Datadog intake sites.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum DatadogSite {
     /// United States (`datadoghq.com`).
+    #[default]
     Us,
     /// European Union (`datadoghq.eu`).
     Eu,
@@ -37,12 +38,6 @@ impl DatadogSite {
             Self::Us => "https://api.datadoghq.com",
             Self::Eu => "https://api.datadoghq.eu",
         }
-    }
-}
-
-impl Default for DatadogSite {
-    fn default() -> Self {
-        Self::Us
     }
 }
 
@@ -307,7 +302,10 @@ mod unit_tests {
 
     #[test]
     fn site_parse_accepts_us_and_eu() {
-        assert_eq!(DatadogSite::parse("datadoghq.com").unwrap(), DatadogSite::Us);
+        assert_eq!(
+            DatadogSite::parse("datadoghq.com").unwrap(),
+            DatadogSite::Us
+        );
         assert_eq!(DatadogSite::parse("datadoghq.eu").unwrap(), DatadogSite::Eu);
         assert_eq!(
             DatadogSite::parse("DATADOGHQ.COM").unwrap(),

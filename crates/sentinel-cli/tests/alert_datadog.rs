@@ -16,7 +16,12 @@ const CONTRACT: &str = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM
 const NETWORK: &str = "testnet";
 const API_KEY: &str = "test-dd-api-key";
 
-fn entry(id: &str, durability: Durability, remaining: i64, status: RiskLevel) -> StorageEntryReport {
+fn entry(
+    id: &str,
+    durability: Durability,
+    remaining: i64,
+    status: RiskLevel,
+) -> StorageEntryReport {
     StorageEntryReport::new(
         id,
         EntryType::ContractInstance,
@@ -53,7 +58,12 @@ fn report_with_entries(entries: Vec<StorageEntryReport>) -> TTLReport {
 }
 
 fn ok_report() -> TTLReport {
-    report_with_entries(vec![entry("instance", Durability::Instance, 500_000, RiskLevel::Ok)])
+    report_with_entries(vec![entry(
+        "instance",
+        Durability::Instance,
+        500_000,
+        RiskLevel::Ok,
+    )])
 }
 
 fn warn_report() -> TTLReport {
@@ -103,8 +113,7 @@ async fn metrics_payload_matches_datadog_series_schema() {
     let requests = server.received_requests().await.unwrap();
     assert_eq!(requests.len(), 1);
 
-    let body: serde_json::Value =
-        serde_json::from_slice(&requests[0].body).expect("body is JSON");
+    let body: serde_json::Value = serde_json::from_slice(&requests[0].body).expect("body is JSON");
     let series = body["series"].as_array().expect("series is array");
     assert_eq!(series.len(), 1);
 
@@ -143,7 +152,10 @@ async fn metrics_name_and_remaining_ledgers_value() {
     let body: serde_json::Value = serde_json::from_slice(&requests[0].body).unwrap();
     let series = &body["series"][0];
 
-    assert_eq!(series["metric"].as_str().unwrap(), "stellar.contract.ttl_remaining");
+    assert_eq!(
+        series["metric"].as_str().unwrap(),
+        "stellar.contract.ttl_remaining"
+    );
     assert_eq!(series["type"].as_str().unwrap(), "gauge");
 
     // points is [[timestamp, value]]
@@ -207,7 +219,12 @@ async fn multiple_entries_batched_into_single_metrics_request() {
     let report = report_with_entries(vec![
         entry("instance", Durability::Instance, 500_000, RiskLevel::Ok),
         entry("code_wasm", Durability::Code, 400_000, RiskLevel::Ok),
-        entry("persistent:COUNTER", Durability::Persistent, 300_000, RiskLevel::Ok),
+        entry(
+            "persistent:COUNTER",
+            Durability::Persistent,
+            300_000,
+            RiskLevel::Ok,
+        ),
     ]);
 
     let mut adapter = DatadogAdapter::new_with_base_url(API_KEY, &server.uri()).unwrap();
@@ -240,7 +257,10 @@ async fn event_submitted_on_warn_transition_with_correct_payload() {
     Mock::given(method("POST"))
         .and(path("/api/v1/events"))
         .and(header("DD-API-KEY", API_KEY))
-        .respond_with(ResponseTemplate::new(202).set_body_json(serde_json::json!({"status":"ok","event":{"id":1}})))
+        .respond_with(
+            ResponseTemplate::new(202)
+                .set_body_json(serde_json::json!({"status":"ok","event":{"id":1}})),
+        )
         .expect(1)
         .mount(&server)
         .await;
@@ -256,10 +276,7 @@ async fn event_submitted_on_warn_transition_with_correct_payload() {
 
     let body: serde_json::Value = serde_json::from_slice(&event_req.body).unwrap();
     assert_eq!(body["alert_type"].as_str().unwrap(), "warning");
-    assert!(body["title"]
-        .as_str()
-        .unwrap()
-        .contains("WARN"));
+    assert!(body["title"].as_str().unwrap().contains("WARN"));
     assert!(body["text"].as_str().unwrap().contains(CONTRACT));
     assert!(body["text"].as_str().unwrap().contains(NETWORK));
     assert_eq!(
@@ -281,14 +298,19 @@ async fn event_alert_type_is_error_for_critical_and_archived() {
         Mock::given(method("POST"))
             .and(path("/api/v1/series"))
             .and(header("DD-API-KEY", API_KEY))
-            .respond_with(ResponseTemplate::new(202).set_body_json(serde_json::json!({"status":"ok"})))
+            .respond_with(
+                ResponseTemplate::new(202).set_body_json(serde_json::json!({"status":"ok"})),
+            )
             .mount(&server)
             .await;
 
         Mock::given(method("POST"))
             .and(path("/api/v1/events"))
             .and(header("DD-API-KEY", API_KEY))
-            .respond_with(ResponseTemplate::new(202).set_body_json(serde_json::json!({"status":"ok","event":{"id":1}})))
+            .respond_with(
+                ResponseTemplate::new(202)
+                    .set_body_json(serde_json::json!({"status":"ok","event":{"id":1}})),
+            )
             .expect(1)
             .mount(&server)
             .await;
@@ -328,7 +350,10 @@ async fn no_duplicate_events_on_repeated_same_state() {
     Mock::given(method("POST"))
         .and(path("/api/v1/events"))
         .and(header("DD-API-KEY", API_KEY))
-        .respond_with(ResponseTemplate::new(202).set_body_json(serde_json::json!({"status":"ok","event":{"id":1}})))
+        .respond_with(
+            ResponseTemplate::new(202)
+                .set_body_json(serde_json::json!({"status":"ok","event":{"id":1}})),
+        )
         .expect(1)
         .mount(&server)
         .await;
@@ -347,7 +372,11 @@ async fn no_duplicate_events_on_repeated_same_state() {
         .filter(|r| r.url.path() == "/api/v1/events")
         .collect();
 
-    assert_eq!(event_requests.len(), 1, "only one event per state transition");
+    assert_eq!(
+        event_requests.len(),
+        1,
+        "only one event per state transition"
+    );
 }
 
 #[tokio::test]
@@ -365,15 +394,18 @@ async fn event_fires_again_after_ok_resolves_state() {
     Mock::given(method("POST"))
         .and(path("/api/v1/events"))
         .and(header("DD-API-KEY", API_KEY))
-        .respond_with(ResponseTemplate::new(202).set_body_json(serde_json::json!({"status":"ok","event":{"id":1}})))
+        .respond_with(
+            ResponseTemplate::new(202)
+                .set_body_json(serde_json::json!({"status":"ok","event":{"id":1}})),
+        )
         .expect(2)
         .mount(&server)
         .await;
 
     let mut adapter = DatadogAdapter::new_with_base_url(API_KEY, &server.uri()).unwrap();
-    adapter.observe(&warn_report()).await.unwrap();  // event 1
-    adapter.observe(&ok_report()).await.unwrap();    // resolves, no event
-    adapter.observe(&warn_report()).await.unwrap();  // event 2
+    adapter.observe(&warn_report()).await.unwrap(); // event 1
+    adapter.observe(&ok_report()).await.unwrap(); // resolves, no event
+    adapter.observe(&warn_report()).await.unwrap(); // event 2
 
     let event_count = server
         .received_requests()
@@ -401,7 +433,10 @@ async fn all_requests_carry_dd_api_key_header() {
     Mock::given(method("POST"))
         .and(path("/api/v1/events"))
         .and(header("DD-API-KEY", API_KEY))
-        .respond_with(ResponseTemplate::new(202).set_body_json(serde_json::json!({"status":"ok","event":{"id":1}})))
+        .respond_with(
+            ResponseTemplate::new(202)
+                .set_body_json(serde_json::json!({"status":"ok","event":{"id":1}})),
+        )
         .mount(&server)
         .await;
 
@@ -431,7 +466,10 @@ fn eu_site_uses_datadoghq_eu_base_url() {
 
 #[test]
 fn site_parse_roundtrip() {
-    assert_eq!(DatadogSite::parse("datadoghq.com").unwrap(), DatadogSite::Us);
+    assert_eq!(
+        DatadogSite::parse("datadoghq.com").unwrap(),
+        DatadogSite::Us
+    );
     assert_eq!(DatadogSite::parse("datadoghq.eu").unwrap(), DatadogSite::Eu);
 }
 
@@ -457,7 +495,10 @@ fn watch_args_expose_datadog_flags() {
 
     // Credentials must not appear in the Debug output.
     let debug = format!("{cli:?}");
-    assert!(!debug.contains("fixture-key"), "API key must not appear in debug output");
+    assert!(
+        !debug.contains("fixture-key"),
+        "API key must not appear in debug output"
+    );
 }
 
 // ── 9. Authentication failures and unsuccessful responses ────────────────────
@@ -502,7 +543,10 @@ async fn non_success_http_status_returns_error() {
     // 500 triggers retries; after three attempts it should fail.
     let result = adapter.observe(&ok_report()).await;
 
-    assert!(result.is_err(), "500 response should produce an error after retries");
+    assert!(
+        result.is_err(),
+        "500 response should produce an error after retries"
+    );
     let msg = result.unwrap_err();
     assert!(!msg.contains(API_KEY), "API key must not appear in error");
 }
