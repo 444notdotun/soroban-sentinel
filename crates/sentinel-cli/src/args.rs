@@ -97,6 +97,18 @@ pub struct WatchArgs {
     pub pagerduty_routing_key: Option<String>,
     #[arg(long, env = "OPSGENIE_API_KEY", hide_env_values = true)]
     pub opsgenie_api_key: Option<String>,
+    /// Datadog API key for metrics and events submission
+    #[arg(
+        long,
+        env = "DATADOG_API_KEY",
+        hide_env_values = true,
+        value_name = "KEY"
+    )]
+    pub datadog_api_key: Option<String>,
+    /// Datadog intake site: "datadoghq.com" (US, default) or "datadoghq.eu" (EU)
+    #[arg(long, default_value = "datadoghq.com", value_name = "SITE",
+          value_parser = ["datadoghq.com", "datadoghq.eu"])]
+    pub datadog_site: String,
 }
 
 impl std::fmt::Debug for WatchArgs {
