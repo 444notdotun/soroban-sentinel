@@ -1,5 +1,6 @@
 //! Core pure domain models and calculations.
 
+pub mod acceleration;
 pub mod alias;
 pub mod budget;
 pub mod bundle;
@@ -26,6 +27,11 @@ pub mod upgrade;
 pub mod wasm_analysis;
 pub mod wasm_graph;
 
+pub use acceleration::{
+    AcceleratedDecayWarning, AccelerationError, AccelerationReport, DecayClassification,
+    EntryAcceleration, StateGrowth, StorageAccelerationTracker,
+    DEFAULT_ACCELERATION_TOLERANCE_RATIO,
+};
 pub use alias::{AliasError, AliasRegistry};
 pub use bundle::{
     plan_bundle_footprints, BundleError, BundleFootprint, MAX_BUNDLE_FOOTPRINT_ENTRIES,
